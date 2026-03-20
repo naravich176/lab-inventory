@@ -1,12 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Category, Item, ItemInput } from '../types/database';
-
-// ============================================================
-// Helper
-// ============================================================
-function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
-}
+import { api } from '../api/client';
+import type { Category, Item } from '../api/client';
 
 // ============================================================
 // Props
@@ -33,7 +27,9 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
   const [unit, setUnit] = useState('');
   const [currentStock, setCurrentStock] = useState<number>(0);
   const [minStock, setMinStock] = useState<number>(0);
-  const [description, setDescription] = useState('');
+  const [size, setSize] = useState('');
+  const [grade, setGrade] = useState('');
+  const [brand, setBrand] = useState('');
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -47,18 +43,9 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
   // Load categories
   // ============================================================
   const fetchCategories = useCallback(async () => {
-    if (!isElectron()) {
-      setCategories([
-        { id: 1, name: 'สารเคมี', icon: 'flask', color: '#EF4444', sort_order: 1, created_at: '', updated_at: '' },
-        { id: 2, name: 'วัสดุวิทยาศาสตร์', icon: 'microscope', color: '#3B82F6', sort_order: 2, created_at: '', updated_at: '' },
-        { id: 3, name: 'วัสดุสำนักงาน', icon: 'briefcase', color: '#F59E0B', sort_order: 3, created_at: '', updated_at: '' },
-        { id: 4, name: 'วัสดุงานบ้าน', icon: 'home', color: '#10B981', sort_order: 4, created_at: '', updated_at: '' },
-      ]);
-      return;
-    }
     try {
-      const res = await window.electronAPI.getCategories();
-      if (res.success && res.data) setCategories(res.data);
+      const data = await api.getCategories();
+      setCategories(data);
     } catch (err) {
       console.error(err);
     }
@@ -79,7 +66,11 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
       setUnit(editItem.unit);
       setCurrentStock(editItem.current_stock);
       setMinStock(editItem.min_stock);
-      setDescription(editItem.description || '');
+      // แยก description กลับเป็น 3 fields (เก็บรูปแบบ: ขนาด|เกรด|ยี่ห้อ)
+      const parts = (editItem.description || '').split('|');
+      setSize(parts[0] || '');
+      setGrade(parts[1] || '');
+      setBrand(parts[2] || '');
     }
   }, [editItem]);
 
@@ -110,37 +101,23 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
     setLoading(true);
     setError(null);
 
-    const data: ItemInput = {
+    const data = {
       name: name.trim(),
       cat_code: catCode.trim(),
       category_id: categoryId,
       unit: unit.trim(),
       current_stock: currentStock,
       min_stock: minStock,
-      description: description.trim(),
+      description: [size.trim(), grade.trim(), brand.trim()].join('|'),
     };
 
-    if (!isElectron()) {
-      // Mock delay
-      await new Promise(r => setTimeout(r, 500));
-      setLoading(false);
-      onSave();
-      return;
-    }
-
     try {
-      let res;
       if (isEdit && editItem) {
-        res = await window.electronAPI.updateItem(editItem.id, data);
+        await api.updateItem(editItem.id, data);
       } else {
-        res = await window.electronAPI.createItem(data);
+        await api.createItem(data);
       }
-
-      if (res.success) {
-        onSave();
-      } else {
-        setError(res.error || 'บันทึกไม่สำเร็จ');
-      }
+      onSave();
     } catch (err: any) {
       setError(err.message || 'เกิดข้อผิดพลาด');
     } finally {
@@ -276,14 +253,46 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
                 {fieldErrors.unit && <p className="text-xs text-red-500 mt-1">{fieldErrors.unit}</p>}
               </div>
 
-              {/* คำอธิบาย */}
+              {/* ขนาด */}
               <div>
-                <label className={labelClass}>คำอธิบาย / ขนาด / เกรด</label>
+                <label className={labelClass}>ขนาด</label>
                 <input
                   type="text"
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  placeholder="ระบุรายละเอียดเพิ่มเติม (ถ้ามี)"
+                  value={size}
+                  onChange={e => setSize(e.target.value)}
+                  placeholder="ระบุขนาด/มิติ เช่น 500ml, 1kg"
+                  className={inputClass() + " text-slate-900"}
+                />
+              </div>
+
+              {/* เกรด */}
+              <div>
+                <label className={labelClass}>เกรด</label>
+                <select
+                  value={grade}
+                  onChange={e => setGrade(e.target.value)}
+                  className={inputClass() + " text-slate-900"}
+                >
+                  <option value="">เลือกเกรด (ถ้ามี)</option>
+                  <option value="Analytical Reagent (AR)">Analytical Reagent (AR)</option>
+                  <option value="Laboratory Grade">Laboratory Grade</option>
+                  <option value="General Purpose">General Purpose</option>
+                  <option value="ACS Grade">ACS Grade</option>
+                  <option value="HPLC Grade">HPLC Grade</option>
+                  <option value="Food Grade">Food Grade</option>
+                  <option value="Technical Grade">Technical Grade</option>
+                  <option value="อื่นๆ">อื่นๆ</option>
+                </select>
+              </div>
+
+              {/* ยี่ห้อ */}
+              <div>
+                <label className={labelClass}>ยี่ห้อ</label>
+                <input
+                  type="text"
+                  value={brand}
+                  onChange={e => setBrand(e.target.value)}
+                  placeholder="ระบุยี่ห้อ เช่น Merck, Sigma"
                   className={inputClass() + " text-slate-900"}
                 />
               </div>

@@ -1,12 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { MonthlySummaryRow, DashboardStats } from '../types/database';
-
-// ============================================================
-// Helper
-// ============================================================
-function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
-}
+import { api } from '../api/client';
+import type { MonthlySummary, DashboardStats } from '../api/client';
 
 const thaiMonths = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -17,38 +11,6 @@ const thaiMonthsShort = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
-
-// Mock data
-const mockMonthlySummary: MonthlySummaryRow[] = [
-  { item_name: 'Ethanol 95% (AR Grade)', unit: 'ขวด', category_name: 'สารเคมี', total_withdrawn: 18, total_added: 30, transaction_count: 8 },
-  { item_name: 'Hydrochloric Acid 37%', unit: 'ขวด', category_name: 'สารเคมี', total_withdrawn: 12, total_added: 15, transaction_count: 5 },
-  { item_name: 'Sodium Chloride', unit: 'กก.', category_name: 'สารเคมี', total_withdrawn: 8, total_added: 10, transaction_count: 4 },
-  { item_name: 'ถุงมือยาง', unit: 'กล่อง', category_name: 'วัสดุวิทยาศาสตร์', total_withdrawn: 25, total_added: 30, transaction_count: 12 },
-  { item_name: 'กระดาษ A4', unit: 'รีม', category_name: 'วัสดุสำนักงาน', total_withdrawn: 15, total_added: 20, transaction_count: 6 },
-];
-
-// Mock yearly data (12 months)
-const mockYearlyData = [
-  { month: 1, withdrawn: 45, added: 60 },
-  { month: 2, withdrawn: 38, added: 50 },
-  { month: 3, withdrawn: 52, added: 55 },
-  { month: 4, withdrawn: 41, added: 45 },
-  { month: 5, withdrawn: 58, added: 70 },
-  { month: 6, withdrawn: 35, added: 40 },
-  { month: 7, withdrawn: 48, added: 55 },
-  { month: 8, withdrawn: 62, added: 75 },
-  { month: 9, withdrawn: 44, added: 50 },
-  { month: 10, withdrawn: 78, added: 80 },
-  { month: 11, withdrawn: 55, added: 60 },
-  { month: 12, withdrawn: 30, added: 35 },
-];
-
-const mockStats: DashboardStats = {
-  totalItems: 48,
-  lowStockCount: 5,
-  totalStaff: 12,
-  todayTransactions: 3,
-};
 
 // ============================================================
 // SVG Bar Chart Component
@@ -269,7 +231,7 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
   const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly');
 
   // Data
-  const [monthlySummary, setMonthlySummary] = useState<MonthlySummaryRow[]>([]);
+  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary[]>([]);
   const [yearlyData, setYearlyData] = useState<{ month: number; withdrawn: number; added: number }[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -281,17 +243,10 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
   // Fetch monthly summary
   // ============================================================
   const fetchMonthlySummary = useCallback(async () => {
-    if (!isElectron()) {
-      setMonthlySummary(mockMonthlySummary);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
-      const res = await window.electronAPI.getMonthlySummary(selectedYear, selectedMonth);
-      if (res.success && res.data) {
-        setMonthlySummary(res.data);
-      }
+      const data = await api.getMonthlySummary(selectedYear, selectedMonth);
+      setMonthlySummary(data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [selectedYear, selectedMonth]);
@@ -300,21 +255,16 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
   // Fetch yearly data (all 12 months)
   // ============================================================
   const fetchYearlyData = useCallback(async () => {
-    if (!isElectron()) {
-      setYearlyData(mockYearlyData);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
       const results: { month: number; withdrawn: number; added: number }[] = [];
       for (let m = 1; m <= 12; m++) {
-        const res = await window.electronAPI.getMonthlySummary(selectedYear, m);
-        if (res.success && res.data) {
-          const withdrawn = res.data.reduce((s: number, r: MonthlySummaryRow) => s + r.total_withdrawn, 0);
-          const added = res.data.reduce((s: number, r: MonthlySummaryRow) => s + r.total_added, 0);
+        try {
+          const data = await api.getMonthlySummary(selectedYear, m);
+          const withdrawn = data.reduce((s: number, r: MonthlySummary) => s + r.total_withdrawn, 0);
+          const added = data.reduce((s: number, r: MonthlySummary) => s + r.total_added, 0);
           results.push({ month: m, withdrawn, added });
-        } else {
+        } catch {
           results.push({ month: m, withdrawn: 0, added: 0 });
         }
       }
@@ -327,13 +277,9 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
   // Fetch stats
   // ============================================================
   const fetchStats = useCallback(async () => {
-    if (!isElectron()) {
-      setStats(mockStats);
-      return;
-    }
     try {
-      const res = await window.electronAPI.getDashboardStats();
-      if (res.success && res.data) setStats(res.data);
+      const data = await api.getDashboardStats();
+      setStats(data);
     } catch (err) { console.error(err); }
   }, []);
 

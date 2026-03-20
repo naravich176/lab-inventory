@@ -1,12 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { Staff, StaffInput } from '../types/database';
-
-// ============================================================
-// Helper
-// ============================================================
-function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
-}
+import { api } from '../api/client';
+import type { Staff } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return '-';
@@ -14,13 +9,6 @@ function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
   } catch { return dateStr; }
 }
-
-// Mock data
-const mockStaff: Staff[] = [
-  { id: 1, name: 'สมชาย ใจดี', position: 'นักวิทยาศาสตร์', department: 'แล็บเคมี', phone: '081-234-5678', status: 'active', created_at: '2023-01-15', updated_at: '2023-10-20' },
-  { id: 2, name: 'สมหญิง รักงาน', position: 'ผู้ช่วยนักวิทยาศาสตร์', department: 'แล็บเคมี', phone: '089-876-5432', status: 'active', created_at: '2023-03-10', updated_at: '2023-10-18' },
-  { id: 3, name: 'วิชัย เก่งมาก', position: 'เจ้าหน้าที่ห้องปฏิบัติการ', department: 'แล็บชีววิทยา', phone: '062-111-2222', status: 'active', created_at: '2023-05-20', updated_at: '2023-10-15' },
-];
 
 // ============================================================
 // Staff Form Modal
@@ -69,32 +57,20 @@ const StaffFormModal: React.FC<StaffFormModalProps> = ({ editStaff, onSave, onCl
     setLoading(true);
     setError(null);
 
-    const data: StaffInput = {
+    const data = {
       name: name.trim(),
       position: position.trim(),
       department: department.trim(),
       phone: phone.trim(),
     };
 
-    if (!isElectron()) {
-      await new Promise(r => setTimeout(r, 400));
-      setLoading(false);
-      onSave();
-      return;
-    }
-
     try {
-      let res;
       if (isEdit && editStaff) {
-        res = await window.electronAPI.updateStaff(editStaff.id, data);
+        await api.updateStaff(editStaff.id, data);
       } else {
-        res = await window.electronAPI.createStaff(data);
+        await api.createStaff(data);
       }
-      if (res.success) {
-        onSave();
-      } else {
-        setError(res.error || 'บันทึกไม่สำเร็จ');
-      }
+      onSave();
     } catch (err: any) {
       setError(err.message || 'เกิดข้อผิดพลาด');
     } finally {
@@ -309,6 +285,7 @@ interface StaffManagementProps {
 }
 
 const StaffManagement: React.FC<StaffManagementProps> = ({ onNavigateHome }) => {
+  const { isAdmin } = useAuth();
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -346,30 +323,13 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onNavigateHome }) => 
   // Fetch staff
   // ============================================================
   const fetchStaff = useCallback(async () => {
-    if (!isElectron()) {
-      let filtered = [...mockStaff];
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase();
-        filtered = filtered.filter(s =>
-          s.name.toLowerCase().includes(q) ||
-          s.position.toLowerCase().includes(q) ||
-          s.department.toLowerCase().includes(q)
-        );
-      }
-      setStaffList(filtered);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
-      const res = await window.electronAPI.getStaff({
+      const data = await api.getStaff({
         search: debouncedSearch || undefined,
         status: 'active',
       });
-      if (res.success && res.data) {
-        setStaffList(res.data);
-      }
+      setStaffList(data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [debouncedSearch]);
@@ -383,23 +343,10 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onNavigateHome }) => 
     if (!deletingStaff) return;
     setDeleteLoading(true);
 
-    if (!isElectron()) {
-      await new Promise(r => setTimeout(r, 400));
-      setStaffList(prev => prev.filter(s => s.id !== deletingStaff.id));
-      setDeletingStaff(null);
-      setDeleteLoading(false);
-      setToast({ message: `ลบเจ้าหน้าที่ "${deletingStaff.name}" สำเร็จ`, type: 'success' });
-      return;
-    }
-
     try {
-      const res = await window.electronAPI.deleteStaff(deletingStaff.id);
-      if (res.success) {
-        setToast({ message: `ลบเจ้าหน้าที่ "${deletingStaff.name}" สำเร็จ`, type: 'success' });
-        fetchStaff();
-      } else {
-        setToast({ message: res.error || 'ลบไม่สำเร็จ', type: 'error' });
-      }
+      await api.deleteStaff(deletingStaff.id);
+      setToast({ message: `ลบเจ้าหน้าที่ "${deletingStaff.name}" สำเร็จ`, type: 'success' });
+      fetchStaff();
     } catch (err: any) {
       setToast({ message: err.message || 'เกิดข้อผิดพลาด', type: 'error' });
     } finally {
@@ -470,13 +417,15 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onNavigateHome }) => 
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">จัดการรายชื่อเจ้าหน้าที่</h2>
             <p className="text-slate-500 text-sm mt-1">เพิ่ม แก้ไข และจัดการรายชื่อเจ้าหน้าที่ในระบบ</p>
           </div>
-          <button
-            onClick={openAdd}
-            className="px-5 py-2.5 bg-[#14b84b] hover:bg-[#0ea53e] text-white font-bold text-sm rounded-lg shadow-lg shadow-green-500/20 flex items-center gap-2 transition-all"
-          >
-            <span className="material-symbols-outlined text-lg">person_add</span>
-            เพิ่มเจ้าหน้าที่
-          </button>
+          {isAdmin && (
+            <button
+              onClick={openAdd}
+              className="px-5 py-2.5 bg-[#14b84b] hover:bg-[#0ea53e] text-white font-bold text-sm rounded-lg shadow-lg shadow-green-500/20 flex items-center gap-2 transition-all"
+            >
+              <span className="material-symbols-outlined text-lg">person_add</span>
+              เพิ่มเจ้าหน้าที่
+            </button>
+          )}
         </div>
 
         {/* Stats */}
@@ -578,6 +527,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onNavigateHome }) => 
                       <td className="px-5 py-3.5 text-sm text-slate-500">{staff.phone || '-'}</td>
                       <td className="px-5 py-3.5 text-sm text-slate-500">{formatDate(staff.created_at)}</td>
                       <td className="px-5 py-3.5">
+                        {isAdmin && (
                         <div className="relative flex items-center justify-end gap-1" ref={openMenuId === staff.id ? menuRef : undefined}>
                           <button
                             onClick={() => openEdit(staff)}
@@ -610,6 +560,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ onNavigateHome }) => 
                             </div>
                           )}
                         </div>
+                        )}
                       </td>
                     </tr>
                   ))

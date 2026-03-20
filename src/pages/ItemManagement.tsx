@@ -1,13 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { Category, Item, ItemFilters } from '../types/database';
+import { api } from '../api/client';
+import type { Category, Item, ItemFilters } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import ItemForm from './ItemForm';
-
-// ============================================================
-// Helper
-// ============================================================
-function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
-}
 
 function getItemStatus(item: Item): string {
   if (item.current_stock <= 0) return 'หมด';
@@ -33,22 +28,6 @@ function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
   } catch { return dateStr; }
 }
-
-// Mock data for browser dev
-const mockCategories: Category[] = [
-  { id: 0, name: 'ทั้งหมด', icon: 'category', color: '#64748b', sort_order: 0, created_at: '', updated_at: '' },
-  { id: 1, name: 'สารเคมี', icon: 'flask', color: '#EF4444', sort_order: 1, created_at: '', updated_at: '' },
-  { id: 2, name: 'วัสดุวิทยาศาสตร์', icon: 'microscope', color: '#3B82F6', sort_order: 2, created_at: '', updated_at: '' },
-  { id: 3, name: 'วัสดุสำนักงาน', icon: 'briefcase', color: '#F59E0B', sort_order: 3, created_at: '', updated_at: '' },
-  { id: 4, name: 'วัสดุงานบ้าน', icon: 'home', color: '#10B981', sort_order: 4, created_at: '', updated_at: '' },
-];
-
-const mockItems: Item[] = [
-  { id: 1, name: 'Ethanol 95% (AR Grade)', cat_code: 'CH-00125', unit: 'ขวด', min_stock: 5, current_stock: 25, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-24', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 2, name: 'Hydrochloric Acid 37%', cat_code: 'CH-00128', unit: 'ขวด', min_stock: 5, current_stock: 3, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-22', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 3, name: 'Sodium Chloride', cat_code: 'CH-00210', unit: 'กก.', min_stock: 5, current_stock: 12, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-18', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 4, name: 'Sulfuric Acid 98%', cat_code: 'CH-00135', unit: 'ขวด', min_stock: 5, current_stock: 0, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-15', category_name: 'สารเคมี', category_color: '#EF4444' },
-];
 
 // ============================================================
 // Confirm Delete Modal
@@ -136,6 +115,7 @@ interface ItemManagementProps {
 }
 
 const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
+  const { isAdmin } = useAuth();
   // View mode: 'list' | 'add' | 'edit'
   const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -187,16 +167,10 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
   // Fetch categories
   // ============================================================
   const fetchCategories = useCallback(async () => {
-    if (!isElectron()) {
-      setCategories(mockCategories);
-      return;
-    }
     try {
-      const res = await window.electronAPI.getCategories();
-      if (res.success && res.data) {
-        const allOption: Category = { id: 0, name: 'ทั้งหมด', icon: 'category', color: '#64748b', sort_order: 0, created_at: '', updated_at: '' };
-        setCategories([allOption, ...res.data]);
-      }
+      const data = await api.getCategories();
+      const allOption: Category = { id: 0, name: 'ทั้งหมด', icon: 'category', color: '#64748b', sort_order: 0, created_at: '', updated_at: '' };
+      setCategories([allOption, ...data]);
     } catch (err) { console.error(err); }
   }, []);
 
@@ -204,20 +178,6 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
   // Fetch items
   // ============================================================
   const fetchItems = useCallback(async () => {
-    if (!isElectron()) {
-      let filtered = [...mockItems];
-      if (filterCategory > 0) filtered = filtered.filter(i => i.category_id === filterCategory);
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase();
-        filtered = filtered.filter(i => i.name.toLowerCase().includes(q) || i.cat_code.toLowerCase().includes(q));
-      }
-      setItems(filtered);
-      setTotal(filtered.length);
-      setTotalPages(1);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
       const filters: ItemFilters = {
@@ -226,12 +186,10 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
         page,
         limit,
       };
-      const res = await window.electronAPI.getItems(filters);
-      if (res.success && res.data) {
-        setItems(res.data.items);
-        setTotal(res.data.total);
-        setTotalPages(res.data.totalPages);
-      }
+      const data = await api.getItems(filters);
+      setItems(data.items);
+      setTotal(data.total);
+      setTotalPages(data.totalPages);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [filterCategory, debouncedSearch, page]);
@@ -247,23 +205,10 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
     if (!deleteItem) return;
     setDeleteLoading(true);
 
-    if (!isElectron()) {
-      await new Promise(r => setTimeout(r, 400));
-      setItems(prev => prev.filter(i => i.id !== deleteItem.id));
-      setDeleteItem(null);
-      setDeleteLoading(false);
-      setToast({ message: `ลบรายการ "${deleteItem.name}" สำเร็จ`, type: 'success' });
-      return;
-    }
-
     try {
-      const res = await window.electronAPI.deleteItem(deleteItem.id);
-      if (res.success) {
-        setToast({ message: `ลบรายการ "${deleteItem.name}" สำเร็จ`, type: 'success' });
-        fetchItems();
-      } else {
-        setToast({ message: res.error || 'ลบไม่สำเร็จ', type: 'error' });
-      }
+      await api.deleteItem(deleteItem.id);
+      setToast({ message: `ลบรายการ "${deleteItem.name}" สำเร็จ`, type: 'success' });
+      fetchItems();
     } catch (err: any) {
       setToast({ message: err.message || 'เกิดข้อผิดพลาด', type: 'error' });
     } finally {
@@ -346,13 +291,15 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">จัดการวัสดุอุปกรณ์</h2>
             <p className="text-slate-500 text-sm mt-1">เพิ่ม แก้ไข และจัดการรายการวัสดุทั้งหมดในระบบ</p>
           </div>
-          <button
-            onClick={goAdd}
-            className="px-5 py-2.5 bg-[#14b84b] hover:bg-[#0ea53e] text-white font-bold text-sm rounded-lg shadow-lg shadow-green-500/20 flex items-center gap-2 transition-all"
-          >
-            <span className="material-symbols-outlined text-lg">add</span>
-            เพิ่มรายการใหม่
-          </button>
+          {isAdmin && (
+            <button
+              onClick={goAdd}
+              className="px-5 py-2.5 bg-[#14b84b] hover:bg-[#0ea53e] text-white font-bold text-sm rounded-lg shadow-lg shadow-green-500/20 flex items-center gap-2 transition-all"
+            >
+              <span className="material-symbols-outlined text-lg">add</span>
+              เพิ่มรายการใหม่
+            </button>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -480,6 +427,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
                         </td>
                         <td className="px-5 py-3.5 text-sm text-slate-500">{formatDate(item.updated_at)}</td>
                         <td className="px-5 py-3.5">
+                          {isAdmin && (
                           <div className="relative flex items-center justify-end gap-1" ref={openMenuId === item.id ? menuRef : undefined}>
                             <button
                               onClick={() => goEdit(item)}
@@ -513,6 +461,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
                               </div>
                             )}
                           </div>
+                          )}
                         </td>
                       </tr>
                     );

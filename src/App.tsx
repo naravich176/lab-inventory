@@ -1,20 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from './hooks/useAuth';
+import Login from './pages/Login';
 import Home from './pages/Home';
 import ItemManagement from './pages/ItemManagement';
 import StaffManagement from './pages/StaffManagement';
 import ReportSummary from './pages/ReportSummary';
 import PrintInventory from './pages/PrintInventory';
+import CategoryManagement from './pages/CategoryManagement';
 import NotificationPanel from './components/NotificationPanel';
 
 // ============================================================
 // Simple page router ด้วย state
-// ไม่ต้องพึ่ง react-router — เหมาะกับ Electron desktop app
 // ============================================================
-type Page = 'home' | 'items' | 'staff' | 'report' | 'print';
+type Page = 'home' | 'items' | 'staff' | 'report' | 'print' | 'categories';
 
 const App: React.FC = () => {
+  const { user, isLoggedIn, isLoading, isAdmin, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [showSettings, setShowSettings] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) setShowSettings(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setShowUserMenu(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // กำลังตรวจ token
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f6f7f8]" style={{ fontFamily: "'Space Grotesk', 'Noto Sans Thai', sans-serif" }}>
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#14b84b] to-[#0ea53e] rounded-2xl shadow-lg shadow-green-500/30 mb-4">
+            <span className="text-3xl">🧪</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-500">
+            <svg className="animate-spin h-5 w-5 text-[#14b84b]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-sm font-medium">กำลังโหลด...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ยังไม่ login → แสดงหน้า Login
+  if (!isLoggedIn) {
+    return <Login />;
+  }
+
+  // login แล้ว → แสดง app ปกติ
   return (
     <>
       {/* Shared Navbar */}
@@ -77,12 +120,78 @@ const App: React.FC = () => {
             </button>
           </nav>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <NotificationPanel onNavigateItems={() => setCurrentPage('items')} />
-          <div className="bg-green-100 rounded-full p-1 border border-green-200">
-            <div className="w-8 h-8 rounded-full bg-[#14b84b] flex items-center justify-center text-white text-sm font-bold">
-              A
-            </div>
+
+          {/* Settings */}
+          <div className="relative" ref={settingsRef}>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-2 rounded-full transition-colors ${
+                showSettings || currentPage === 'categories'
+                  ? 'bg-green-100 text-[#14b84b]'
+                  : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              <span className="material-symbols-outlined">settings</span>
+            </button>
+
+            {showSettings && (
+              <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-2xl z-[60] overflow-hidden py-1">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <p className="text-sm font-bold text-slate-900">ตั้งค่าระบบ</p>
+                </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => { setCurrentPage('categories'); setShowSettings(false); }}
+                    className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-slate-50 transition-colors ${currentPage === 'categories' ? 'text-[#14b84b] font-medium' : 'text-slate-700'}`}
+                  >
+                    <span className="material-symbols-outlined text-lg">category</span>
+                    จัดการหมวดหมู่
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* User Menu */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                <span className="text-[#14b84b] font-bold text-sm">
+                  {user?.display_name?.charAt(0) || 'U'}
+                </span>
+              </div>
+              <div className="text-left hidden sm:block">
+                <p className="text-sm font-medium text-slate-900 leading-tight">{user?.display_name || 'ผู้ใช้'}</p>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  {user?.role === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน'}
+                </p>
+              </div>
+              <span className="material-symbols-outlined text-slate-400 text-sm">expand_more</span>
+            </button>
+
+            {showUserMenu && (
+              <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-2xl z-[60] overflow-hidden py-1">
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <p className="text-sm font-bold text-slate-900">{user?.display_name}</p>
+                  <p className="text-xs text-slate-400">@{user?.username}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    logout();
+                    setShowUserMenu(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-red-50 text-red-600 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-lg">logout</span>
+                  ออกจากระบบ
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -102,6 +211,9 @@ const App: React.FC = () => {
       )}
       {currentPage === 'print' && (
         <PrintInventory onNavigateHome={() => setCurrentPage('home')} />
+      )}
+      {currentPage === 'categories' && (
+        <CategoryManagement onNavigateHome={() => setCurrentPage('home')} />
       )}
     </>
   );

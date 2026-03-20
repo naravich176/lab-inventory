@@ -1,23 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { Item } from '../types/database';
-
-// ============================================================
-// Helper
-// ============================================================
-function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
-}
+import { api } from '../api/client';
+import type { Item } from '../api/client';
 
 function getItemStatus(item: Item): 'หมด' | 'ใกล้หมด' {
   if (item.current_stock <= 0) return 'หมด';
   return 'ใกล้หมด';
 }
-
-const mockLowStock: Item[] = [
-  { id: 2, name: 'Hydrochloric Acid 37%', cat_code: 'CH-00128', unit: 'ขวด', min_stock: 5, current_stock: 3, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-22', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 4, name: 'Sulfuric Acid 98%', cat_code: 'CH-00135', unit: 'ขวด', min_stock: 5, current_stock: 0, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-15', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 5, name: 'ถุงมือยาง Size M', cat_code: 'SC-00312', unit: 'กล่อง', min_stock: 10, current_stock: 2, category_id: 2, description: '', status: 'active', created_at: '', updated_at: '2023-10-20', category_name: 'วัสดุวิทยาศาสตร์', category_color: '#3B82F6' },
-];
 
 // ============================================================
 // NotificationPanel
@@ -45,16 +33,10 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
 
   // Fetch low stock items
   const fetchLowStock = useCallback(async () => {
-    if (!isElectron()) {
-      setLowStockItems(mockLowStock);
-      return;
-    }
     setLoading(true);
     try {
-      const res = await window.electronAPI.getLowStockItems();
-      if (res.success && res.data) {
-        setLowStockItems(res.data);
-      }
+      const data = await api.getLowStockItems();
+      setLowStockItems(data);
     } catch (err) {
       console.error(err);
     } finally {

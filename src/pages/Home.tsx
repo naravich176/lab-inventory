@@ -1,39 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type {
-  Category,
-  Item,
-  Staff,
-  ItemFilters,
-} from '../types/database';
+import { api } from '../api/client';
+import type { Category, Item, Staff, ItemFilters } from '../api/client';
 import './Home.css'; // แยก CSS สำหรับ Home page
-// ============================================================
-// Helper: ตรวจสอบว่ารันใน Electron หรือไม่
-// ============================================================
-function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
-}
-
-// ============================================================
-// Mock Data — ใช้ตอน dev ใน browser (ไม่มี Electron)
-// ============================================================
-const mockCategories: Category[] = [
-  { id: 1, name: 'สารเคมี', icon: 'science', color: '#EF4444', sort_order: 1, created_at: '', updated_at: '' },
-  { id: 2, name: 'วัสดุวิทยาศาสตร์', icon: 'experiment', color: '#3B82F6', sort_order: 2, created_at: '', updated_at: '' },
-  { id: 3, name: 'วัสดุสำนักงาน', icon: 'edit_note', color: '#F59E0B', sort_order: 3, created_at: '', updated_at: '' },
-  { id: 4, name: 'วัสดุงานบ้าน', icon: 'cleaning_services', color: '#10B981', sort_order: 4, created_at: '', updated_at: '' },
-];
-
-const mockItems: Item[] = [
-  { id: 1, name: 'Ethanol 95% (AR Grade)', cat_code: 'CH-00125', unit: 'ขวด', min_stock: 5, current_stock: 25, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-24', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 2, name: 'Hydrochloric Acid 37%', cat_code: 'CH-00128', unit: 'ขวด', min_stock: 5, current_stock: 3, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-22', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 3, name: 'Sodium Chloride', cat_code: 'CH-00210', unit: 'กก.', min_stock: 5, current_stock: 12, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-18', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 4, name: 'Sulfuric Acid 98%', cat_code: 'CH-00135', unit: 'ขวด', min_stock: 5, current_stock: 0, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-15', category_name: 'สารเคมี', category_color: '#EF4444' },
-];
-
-const mockStaff: Staff[] = [
-  { id: 1, name: 'สมชาย ใจดี', position: 'นักวิทยาศาสตร์', department: 'แล็บเคมี', phone: '', status: 'active', created_at: '', updated_at: '' },
-  { id: 2, name: 'สมหญิง รักงาน', position: 'ผู้ช่วยนักวิทยาศาสตร์', department: 'แล็บเคมี', phone: '', status: 'active', created_at: '', updated_at: '' },
-];
 
 // ============================================================
 // Icon mapping — ชื่อ icon จาก DB → Material Symbols
@@ -407,23 +375,14 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
   // Fetch Categories
   // ============================================================
   const fetchCategories = useCallback(async () => {
-    if (!isElectron()) {
-      setCategories(mockCategories);
-      setActiveCategory(mockCategories[0]?.id || 0);
-      return;
-    }
     try {
-      const res = await window.electronAPI.getCategories();
-      if (res.success && res.data) {
-        setCategories(res.data);
-        if (res.data.length > 0 && activeCategory === 0) {
-          setActiveCategory(res.data[0].id);
-        }
+      const data = await api.getCategories();
+      setCategories(data);
+      if (data.length > 0 && activeCategory === 0) {
+        setActiveCategory(data[0].id);
       }
     } catch (err) {
       console.error('Fetch categories error:', err);
-      setCategories(mockCategories);
-      setActiveCategory(mockCategories[0]?.id || 0);
     }
   }, []);
 
@@ -432,22 +391,6 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
   // ============================================================
   const fetchItems = useCallback(async () => {
     if (activeCategory === 0) return;
-
-    if (!isElectron()) {
-      // Mock: filter by category and search
-      let filtered = mockItems.filter(i => i.category_id === activeCategory);
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase();
-        filtered = filtered.filter(i =>
-          i.name.toLowerCase().includes(q) || i.cat_code.toLowerCase().includes(q)
-        );
-      }
-      setItems(filtered);
-      setTotal(filtered.length);
-      setTotalPages(1);
-      setLoading(false);
-      return;
-    }
 
     setLoading(true);
     try {
@@ -458,12 +401,10 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
         page,
         limit,
       };
-      const res = await window.electronAPI.getItems(filters);
-      if (res.success && res.data) {
-        setItems(res.data.items);
-        setTotal(res.data.total);
-        setTotalPages(res.data.totalPages);
-      }
+      const data = await api.getItems(filters);
+      setItems(data.items);
+      setTotal(data.total);
+      setTotalPages(data.totalPages);
     } catch (err) {
       console.error('Fetch items error:', err);
     } finally {
@@ -475,15 +416,9 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
   // Fetch Staff (สำหรับ Modal)
   // ============================================================
   const fetchStaff = useCallback(async () => {
-    if (!isElectron()) {
-      setStaffList(mockStaff);
-      return;
-    }
     try {
-      const res = await window.electronAPI.getStaff({ status: 'active' });
-      if (res.success && res.data) {
-        setStaffList(res.data);
-      }
+      const data = await api.getStaff({ status: 'active' });
+      setStaffList(data);
     } catch (err) {
       console.error('Fetch staff error:', err);
     }
@@ -513,36 +448,16 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
     setWithdrawLoading(true);
     setWithdrawError(null);
 
-    if (!isElectron()) {
-      // Mock withdraw
-      await new Promise(r => setTimeout(r, 500));
-      setItems(prev =>
-        prev.map(i =>
-          i.id === data.item_id
-            ? { ...i, current_stock: Math.max(0, i.current_stock - data.quantity) }
-            : i
-        )
-      );
-      setWithdrawItem(null);
-      setWithdrawLoading(false);
-      setToast(`เบิกใช้สำเร็จ — ${data.quantity} ${items.find(i => i.id === data.item_id)?.unit || 'ชิ้น'}`);
-      return;
-    }
-
     try {
-      const res = await window.electronAPI.withdrawItem({
+      const result = await api.withdrawItem({
         item_id: data.item_id,
         staff_id: data.staff_id,
         quantity: data.quantity,
         note: data.note,
       });
-      if (res.success && res.data) {
-        setWithdrawItem(null);
-        setToast(`เบิกใช้สำเร็จ — ${data.quantity} ${res.data.item.unit}`);
-        fetchItems(); // refresh table
-      } else {
-        setWithdrawError(res.error || 'เบิกใช้ไม่สำเร็จ');
-      }
+      setWithdrawItem(null);
+      setToast(`เบิกใช้สำเร็จ — ${data.quantity} ${result.item.unit}`);
+      fetchItems();
     } catch (err: any) {
       setWithdrawError(err.message || 'เกิดข้อผิดพลาด');
     } finally {
@@ -636,16 +551,16 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
               </div>
               <div className="flex gap-2">
                 <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-[65%] text-slate-400 text-lg">search</span>
                   <input
                     type="text"
                     placeholder="ค้นหารายการวัสดุ..."
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] transition-all w-64"
+                    className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] transition-all w-64"
                   />
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-400 text-sm font-medium hover:bg-slate-50 transition-colors">
+                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm font-medium hover:bg-slate-50 transition-colors">
                   <span className="material-symbols-outlined text-lg">filter_list</span> กรอง
                 </button>
               </div>

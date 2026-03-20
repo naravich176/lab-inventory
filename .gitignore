@@ -29,3 +29,12 @@ yarn-error.log*
 
 # Optional eslint cache
 .eslintcache
+
+# environment variables
+.env
+
+# database files
+*.db
+
+# server
+server/node_modules/

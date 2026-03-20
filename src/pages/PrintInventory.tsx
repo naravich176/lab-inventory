@@ -1,12 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { Category, Item, ItemFilters } from '../types/database';
-
-// ============================================================
-// Helper
-// ============================================================
-function isElectron(): boolean {
-  return typeof window !== 'undefined' && !!window.electronAPI;
-}
+import { api } from '../api/client';
+import type { Category, Item, ItemFilters } from '../api/client';
 
 function getItemStatus(item: Item): string {
   if (item.current_stock <= 0) return 'หมด';
@@ -20,20 +14,6 @@ function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
   } catch { return dateStr; }
 }
-
-const mockCategories: Category[] = [
-  { id: 1, name: 'สารเคมี', icon: 'flask', color: '#EF4444', sort_order: 1, created_at: '', updated_at: '' },
-  { id: 2, name: 'วัสดุวิทยาศาสตร์', icon: 'microscope', color: '#3B82F6', sort_order: 2, created_at: '', updated_at: '' },
-  { id: 3, name: 'วัสดุสำนักงาน', icon: 'briefcase', color: '#F59E0B', sort_order: 3, created_at: '', updated_at: '' },
-  { id: 4, name: 'วัสดุงานบ้าน', icon: 'home', color: '#10B981', sort_order: 4, created_at: '', updated_at: '' },
-];
-
-const mockItems: Item[] = [
-  { id: 1, name: 'Ethanol 95% (AR Grade)', cat_code: 'CH-00125', unit: 'ขวด', min_stock: 5, current_stock: 25, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-24', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 2, name: 'Hydrochloric Acid 37%', cat_code: 'CH-00128', unit: 'ขวด', min_stock: 5, current_stock: 3, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-22', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 3, name: 'Sodium Chloride', cat_code: 'CH-00210', unit: 'กก.', min_stock: 5, current_stock: 12, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-18', category_name: 'สารเคมี', category_color: '#EF4444' },
-  { id: 4, name: 'Sulfuric Acid 98%', cat_code: 'CH-00135', unit: 'ขวด', min_stock: 5, current_stock: 0, category_id: 1, description: '', status: 'active', created_at: '', updated_at: '2023-10-15', category_name: 'สารเคมี', category_color: '#EF4444' },
-];
 
 // ============================================================
 // Column config
@@ -89,33 +69,23 @@ const PrintInventory: React.FC<PrintInventoryProps> = ({ onNavigateHome }) => {
   // Fetch
   // ============================================================
   const fetchCategories = useCallback(async () => {
-    if (!isElectron()) { setCategories(mockCategories); return; }
     try {
-      const res = await window.electronAPI.getCategories();
-      if (res.success && res.data) setCategories(res.data);
+      const data = await api.getCategories();
+      setCategories(data);
     } catch (err) { console.error(err); }
   }, []);
 
   const fetchItems = useCallback(async () => {
-    if (!isElectron()) {
-      let filtered = [...mockItems];
-      if (selectedCategory > 0) filtered = filtered.filter(i => i.category_id === selectedCategory);
-      setItems(filtered);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
       const filters: ItemFilters = {
         categoryId: selectedCategory > 0 ? selectedCategory : undefined,
         status: 'active',
         page: 1,
-        limit: 9999, // get all for print
+        limit: 9999,
       };
-      const res = await window.electronAPI.getItems(filters);
-      if (res.success && res.data) {
-        setItems(res.data.items);
-      }
+      const data = await api.getItems(filters);
+      setItems(data.items);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [selectedCategory]);
