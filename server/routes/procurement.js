@@ -96,6 +96,22 @@ router.put('/:id/status', requireProcurementOrAdmin, (req, res, next) => {
   }
 });
 
+// PUT /api/procurement/:id/receive — ยืนยันรับพัสดุ (staff + admin)
+router.put('/:id/receive', requireStaffOrAdmin, (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { new_item } = req.body; // optional: สำหรับวัสดุใหม่
+
+    const result = db.confirmReceived(id, req.user.id, new_item || null);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    if (err.message.includes('ไม่พบ') || err.message.includes('ยืนยันรับได้เฉพาะ') || err.message.includes('วัสดุใหม่ต้อง') || err.message.includes('UNIQUE')) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+    next(err);
+  }
+});
+
 // DELETE /api/procurement/:id — ลบคำขอ (admin เท่านั้น, เฉพาะ status=requested)
 router.delete('/:id', requireAdmin, (req, res, next) => {
   try {

@@ -148,8 +148,11 @@ export interface ProcurementRequest {
   reason: string;
   requested_by: number;
   requested_by_name: string;
-  status: 'requested' | 'ordering' | 'shipping' | 'delivered';
+  status: 'requested' | 'ordering' | 'shipping' | 'delivered' | 'received';
   note: string;
+  received_by: number | null;
+  received_by_name: string | null;
+  received_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -492,6 +495,19 @@ class ApiClient {
 
   async updateProcurementStatus(id: number, data: { status: string; note?: string }): Promise<ProcurementRequest> {
     return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/status`, data);
+  }
+
+  async confirmProcurementReceived(id: number, newItem?: {
+    name: string;
+    cat_code: string;
+    unit: string;
+    min_stock?: number;
+    category_id: number;
+    description?: string;
+  }): Promise<ProcurementRequest> {
+    return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/receive`, {
+      new_item: newItem || undefined,
+    });
   }
 
   async deleteProcurementRequest(id: number): Promise<{ deleted: boolean }> {

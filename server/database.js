@@ -133,6 +133,17 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_procurement_status ON procurement_requests(status);
     CREATE INDEX IF NOT EXISTS idx_procurement_requested_by ON procurement_requests(requested_by);
   `);
+
+  // Migration: เพิ่ม columns received_by, received_at ถ้ายังไม่มี
+  try {
+    db.prepare("SELECT received_by FROM procurement_requests LIMIT 1").get();
+  } catch {
+    db.exec(`
+      ALTER TABLE procurement_requests ADD COLUMN received_by INTEGER DEFAULT NULL;
+      ALTER TABLE procurement_requests ADD COLUMN received_at TEXT DEFAULT NULL;
+    `);
+    console.log('Migration: added received_by, received_at to procurement_requests');
+  }
 }
 
 // ============================================================
@@ -632,9 +643,11 @@ function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } =
   `).get(params);
 
   const requests = db.prepare(`
-    SELECT pr.*, u.display_name as requested_by_name
+    SELECT pr.*, u.display_name as requested_by_name,
+           u2.display_name as received_by_name
     FROM procurement_requests pr
     LEFT JOIN users u ON pr.requested_by = u.id
+    LEFT JOIN users u2 ON pr.received_by = u2.id
     WHERE ${whereClause}
     ORDER BY pr.id DESC
     LIMIT @limit OFFSET @offset
@@ -651,9 +664,11 @@ function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } =
 
 function getProcurementRequestById(id) {
   return db.prepare(`
-    SELECT pr.*, u.display_name as requested_by_name
+    SELECT pr.*, u.display_name as requested_by_name,
+           u2.display_name as received_by_name
     FROM procurement_requests pr
     LEFT JOIN users u ON pr.requested_by = u.id
+    LEFT JOIN users u2 ON pr.received_by = u2.id
     WHERE pr.id = ?
   `).get(id);
 }
@@ -672,6 +687,54 @@ function updateProcurementStatus(id, { status, note }) {
     note: note ?? existing.note,
   });
   return getProcurementRequestById(id);
+}
+
+function confirmReceived(id, userId, newItemData) {
+  const confirm = db.transaction(() => {
+    const existing = getProcurementRequestById(id);
+    if (!existing) throw new Error('ไม่พบคำขอจัดซื้อ');
+    if (existing.status !== 'delivered') {
+      throw new Error('ยืนยันรับได้เฉพาะคำขอที่มีสถานะ "ส่งถึงแล้ว" เท่านั้น');
+    }
+
+    if (existing.item_id) {
+      // วัสดุมีอยู่ในระบบแล้ว → addStock
+      addStock({
+        item_id: existing.item_id,
+        quantity: existing.quantity,
+        note: `รับพัสดุจากคำขอจัดซื้อ #${id}`,
+      });
+    } else if (newItemData) {
+      // วัสดุใหม่ → สร้าง item แล้ว addStock
+      const newItem = createItem({
+        name: newItemData.name,
+        cat_code: newItemData.cat_code,
+        unit: newItemData.unit || existing.unit,
+        min_stock: newItemData.min_stock || 0,
+        current_stock: existing.quantity,
+        category_id: newItemData.category_id,
+        description: newItemData.description || '',
+      });
+      // อัพเดต item_id ใน procurement request
+      db.prepare('UPDATE procurement_requests SET item_id = ? WHERE id = ?').run(newItem.id, id);
+    } else {
+      throw new Error('วัสดุใหม่ต้องกรอกข้อมูลสร้างรายการวัสดุ');
+    }
+
+    // เปลี่ยนสถานะเป็น received + บันทึกผู้ยืนยัน
+    db.prepare(`
+      UPDATE procurement_requests
+      SET status = 'received',
+          received_by = @userId,
+          received_at = datetime('now','localtime'),
+          updated_at = datetime('now','localtime')
+      WHERE id = @id
+    `).run({ id, userId });
+
+    return getProcurementRequestById(id);
+  });
+
+  return confirm();
 }
 
 function deleteProcurementRequest(id) {
@@ -740,5 +803,6 @@ module.exports = {
   getProcurementRequests,
   getProcurementRequestById,
   updateProcurementStatus,
+  confirmReceived,
   deleteProcurementRequest,
 };

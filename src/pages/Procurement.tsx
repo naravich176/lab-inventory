@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import type { ProcurementRequest, Item, PaginatedProcurement } from '../api/client';
+import type { ProcurementRequest, Item, PaginatedProcurement, Category } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 const statusLabels: Record<string, string> = {
@@ -8,6 +8,7 @@ const statusLabels: Record<string, string> = {
   ordering: 'กำลังสั่งซื้อ',
   shipping: 'ระหว่างจัดส่ง',
   delivered: 'ส่งถึงแล้ว',
+  received: 'รับแล้ว',
 };
 
 const statusColors: Record<string, string> = {
@@ -15,6 +16,7 @@ const statusColors: Record<string, string> = {
   ordering: 'bg-blue-100 text-blue-800',
   shipping: 'bg-purple-100 text-purple-800',
   delivered: 'bg-green-100 text-green-800',
+  received: 'bg-emerald-200 text-emerald-900',
 };
 
 function formatDate(dateStr: string): string {
@@ -393,6 +395,208 @@ const UpdateStatusModal: React.FC<UpdateStatusModalProps> = ({ request, onSave, 
 };
 
 // ============================================================
+// Receive Modal — ยืนยันรับพัสดุ (วัสดุที่มีอยู่แล้ว)
+// ============================================================
+interface ReceiveConfirmModalProps {
+  request: ProcurementRequest;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}
+
+const ReceiveConfirmModal: React.FC<ReceiveConfirmModalProps> = ({ request, onConfirm, onCancel, loading }) => (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in">
+      <div className="p-6 text-center">
+        <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <span className="material-symbols-outlined text-[#14b84b] text-3xl">inventory</span>
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">ยืนยันรับพัสดุ</h3>
+        <p className="text-sm text-slate-500 mb-1">รับวัสดุและเพิ่มเข้าคลัง</p>
+        <p className="font-bold text-slate-900">"{request.item_name}"</p>
+        <p className="text-sm text-slate-500 mt-2">จำนวน <span className="font-bold text-[#14b84b]">{request.quantity} {request.unit}</span> จะถูกเพิ่มเข้า stock</p>
+      </div>
+      <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+        <button onClick={onCancel} className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+          ยกเลิก
+        </button>
+        <button
+          onClick={onConfirm}
+          disabled={loading}
+          className="px-6 py-2.5 bg-[#14b84b] text-white text-sm font-bold rounded-lg hover:bg-[#0ea53e] disabled:opacity-50 transition-colors flex items-center gap-2"
+        >
+          {loading ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              กำลังบันทึก...
+            </>
+          ) : (
+            <><span className="material-symbols-outlined text-sm">check</span> ยืนยันรับพัสดุ</>
+          )}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+// ============================================================
+// Receive New Item Modal — วัสดุใหม่ที่ยังไม่มีในระบบ
+// ============================================================
+interface ReceiveNewItemModalProps {
+  request: ProcurementRequest;
+  onSave: () => void;
+  onClose: () => void;
+}
+
+const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSave, onClose }) => {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [name, setName] = useState(request.item_name);
+  const [catCode, setCatCode] = useState('');
+  const [unit, setUnit] = useState(request.unit || 'ชิ้น');
+  const [minStock, setMinStock] = useState(0);
+  const [categoryId, setCategoryId] = useState<number>(0);
+  const [description, setDescription] = useState('');
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchCats() {
+      try {
+        const data = await api.getCategories();
+        setCategories(data);
+        if (data.length > 0) setCategoryId(data[0].id);
+      } catch (err) { console.error(err); }
+    }
+    fetchCats();
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) { setError('กรุณาระบุชื่อวัสดุ'); return; }
+    if (!catCode.trim()) { setError('กรุณาระบุรหัสวัสดุ'); return; }
+    if (!categoryId) { setError('กรุณาเลือกหมวดหมู่'); return; }
+
+    setLoading(true);
+    setError(null);
+    try {
+      await api.confirmProcurementReceived(request.id, {
+        name: name.trim(),
+        cat_code: catCode.trim(),
+        unit: unit.trim() || 'ชิ้น',
+        min_stock: minStock,
+        category_id: categoryId,
+        description: description.trim(),
+      });
+      onSave();
+    } catch (err: any) {
+      setError(err.message || 'เกิดข้อผิดพลาด');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inputClass = 'w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] bg-white outline-none transition-all text-sm text-slate-900';
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-r from-[#14b84b] to-[#0ea53e] px-6 py-5 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-2xl">add_box</span>
+              <h3 className="text-lg font-bold">รับพัสดุ — สร้างวัสดุใหม่</h3>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+            <p className="text-xs text-slate-400">จากคำขอจัดซื้อ #{String(request.id).padStart(3, '0')}</p>
+            <p className="font-bold text-slate-900 mt-0.5">{request.item_name}</p>
+            <p className="text-sm text-slate-500 mt-1">จำนวน <span className="font-bold text-[#14b84b]">{request.quantity} {request.unit}</span> จะถูกเพิ่มเป็น stock เริ่มต้น</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              ชื่อวัสดุ <span className="text-red-500">*</span>
+            </label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} className={inputClass} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                รหัสวัสดุ (cat_code) <span className="text-red-500">*</span>
+              </label>
+              <input type="text" value={catCode} onChange={e => setCatCode(e.target.value)} placeholder="เช่น CHM-001" className={inputClass} autoFocus />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">หน่วย</label>
+              <input type="text" value={unit} onChange={e => setUnit(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                หมวดหมู่ <span className="text-red-500">*</span>
+              </label>
+              <select value={categoryId} onChange={e => setCategoryId(Number(e.target.value))} className={inputClass}>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">จุดสั่งซื้อ (min_stock)</label>
+              <input type="number" min={0} value={minStock} onChange={e => setMinStock(Math.max(0, parseInt(e.target.value) || 0))} className={inputClass} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">รายละเอียด</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)" rows={2} className={inputClass + ' resize-none'} />
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center gap-2">
+              <span className="material-symbols-outlined text-red-500 text-lg">error</span>
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2.5 bg-[#14b84b] text-white text-sm font-bold rounded-lg hover:bg-[#0ea53e] disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  กำลังบันทึก...
+                </>
+              ) : (
+                <><span className="material-symbols-outlined text-lg">check</span> สร้างวัสดุ + รับพัสดุ</>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
 // Delete Confirm Modal
 // ============================================================
 interface DeleteModalProps {
@@ -468,6 +672,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
   const { user, isAdmin, isStaff, isProcurement } = useAuth();
   const canCreate = isStaff || isAdmin;
   const canUpdateStatus = isProcurement || isAdmin;
+  const canReceive = isStaff || isAdmin;
 
   const [requests, setRequests] = useState<ProcurementRequest[]>([]);
   const [total, setTotal] = useState(0);
@@ -484,6 +689,8 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
   const [updatingRequest, setUpdatingRequest] = useState<ProcurementRequest | null>(null);
   const [deletingRequest, setDeletingRequest] = useState<ProcurementRequest | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [receivingRequest, setReceivingRequest] = useState<ProcurementRequest | null>(null);
+  const [receiveLoading, setReceiveLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const fetchRequests = useCallback(async () => {
@@ -531,6 +738,27 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
     fetchRequests();
   };
 
+  const handleReceiveExisting = async () => {
+    if (!receivingRequest) return;
+    setReceiveLoading(true);
+    try {
+      await api.confirmProcurementReceived(receivingRequest.id);
+      setToast({ message: 'ยืนยันรับพัสดุสำเร็จ — เพิ่ม stock แล้ว', type: 'success' });
+      setReceivingRequest(null);
+      fetchRequests();
+    } catch (err: any) {
+      setToast({ message: err.message || 'เกิดข้อผิดพลาด', type: 'error' });
+    } finally {
+      setReceiveLoading(false);
+    }
+  };
+
+  const handleReceiveNewSave = () => {
+    setToast({ message: 'ยืนยันรับพัสดุสำเร็จ — สร้างวัสดุใหม่แล้ว', type: 'success' });
+    setReceivingRequest(null);
+    fetchRequests();
+  };
+
   // Pagination
   const getPageRange = (): number[] => {
     if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -545,6 +773,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
     { value: 'ordering', label: 'กำลังสั่งซื้อ' },
     { value: 'shipping', label: 'ระหว่างจัดส่ง' },
     { value: 'delivered', label: 'ส่งถึงแล้ว' },
+    { value: 'received', label: 'รับแล้ว' },
   ];
 
   return (
@@ -553,6 +782,21 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
       {showCreate && <CreateRequestModal onSave={handleCreateSave} onClose={() => setShowCreate(false)} />}
       {updatingRequest && <UpdateStatusModal request={updatingRequest} onSave={handleUpdateSave} onClose={() => setUpdatingRequest(null)} />}
       {deletingRequest && <DeleteModal request={deletingRequest} onConfirm={handleDelete} onCancel={() => setDeletingRequest(null)} loading={deleteLoading} />}
+      {receivingRequest && receivingRequest.item_id && (
+        <ReceiveConfirmModal
+          request={receivingRequest}
+          onConfirm={handleReceiveExisting}
+          onCancel={() => setReceivingRequest(null)}
+          loading={receiveLoading}
+        />
+      )}
+      {receivingRequest && !receivingRequest.item_id && (
+        <ReceiveNewItemModal
+          request={receivingRequest}
+          onSave={handleReceiveNewSave}
+          onClose={() => setReceivingRequest(null)}
+        />
+      )}
 
       <div className="p-8 max-w-7xl mx-auto w-full">
         {/* Breadcrumb */}
@@ -583,7 +827,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4">
             <p className="text-xs text-slate-400 font-medium mb-1">ทั้งหมด</p>
             <p className="text-2xl font-bold text-slate-900">{total}</p>
@@ -677,13 +921,22 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                       <td className="px-5 py-3.5 text-sm text-slate-500 max-w-[150px] truncate">{req.note || '-'}</td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1">
-                          {canUpdateStatus && (
+                          {canUpdateStatus && req.status !== 'received' && (
                             <button
                               onClick={() => setUpdatingRequest(req)}
                               className="p-1.5 text-slate-400 hover:text-[#14b84b] hover:bg-green-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                               title="อัพเดตสถานะ"
                             >
                               <span className="material-symbols-outlined text-lg">update</span>
+                            </button>
+                          )}
+                          {canReceive && req.status === 'delivered' && (
+                            <button
+                              onClick={() => setReceivingRequest(req)}
+                              className="p-1.5 text-slate-400 hover:text-[#14b84b] hover:bg-green-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              title="ยืนยันรับพัสดุ"
+                            >
+                              <span className="material-symbols-outlined text-lg">inventory</span>
                             </button>
                           )}
                           {isAdmin && req.status === 'requested' && (
