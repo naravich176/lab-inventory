@@ -443,7 +443,8 @@ interface CategoryManagementProps {
 }
 
 const CategoryManagement: React.FC<CategoryManagementProps> = ({ onNavigateHome }) => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isStaff } = useAuth();
+  const canEdit = isStaff || isAdmin;
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -547,7 +548,7 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({ onNavigateHome 
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">จัดการหมวดหมู่พัสดุ</h2>
             <p className="text-slate-500 text-sm mt-1">เพิ่ม แก้ไข และจัดการหมวดหมู่วัสดุอุปกรณ์</p>
           </div>
-          {isAdmin && (
+          {canEdit && (
             <button
               onClick={openAdd}
               className="px-5 py-2.5 bg-[#14b84b] hover:bg-[#0ea53e] text-white font-bold text-sm rounded-lg shadow-lg shadow-green-500/20 flex items-center gap-2 transition-all"
@@ -612,7 +613,7 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({ onNavigateHome 
                   </div>
 
                   {/* Actions */}
-                  {isAdmin && (
+                  {canEdit && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => openEdit(cat)}

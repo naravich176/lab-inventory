@@ -4,7 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireStaffOrAdmin } = require('../middleware/auth');
 
 // ทุก route ต้อง login
 router.use(authenticateToken);
@@ -33,7 +33,7 @@ router.get('/:id', (req, res, next) => {
 });
 
 // POST /api/categories — admin only
-router.post('/', requireAdmin, (req, res, next) => {
+router.post('/', requireStaffOrAdmin, (req, res, next) => {
   try {
     const { name, icon = '', color = '#4F46E5', sort_order = 0 } = req.body;
     if (!name) {
@@ -50,7 +50,7 @@ router.post('/', requireAdmin, (req, res, next) => {
 });
 
 // PUT /api/categories/:id — admin only
-router.put('/:id', requireAdmin, (req, res, next) => {
+router.put('/:id', requireStaffOrAdmin, (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const existing = db.getCategoryById(id);
@@ -77,7 +77,7 @@ router.put('/:id', requireAdmin, (req, res, next) => {
 });
 
 // DELETE /api/categories/:id — admin only
-router.delete('/:id', requireAdmin, (req, res, next) => {
+router.delete('/:id', requireStaffOrAdmin, (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const existing = db.getCategoryById(id);

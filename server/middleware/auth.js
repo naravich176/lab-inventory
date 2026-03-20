@@ -50,9 +50,33 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Middleware: ตรวจสอบว่าเป็น staff หรือ admin
+function requireStaffOrAdmin(req, res, next) {
+  if (req.user.role !== 'staff' && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'ต้องเป็นเจ้าหน้าที่ปฏิบัติการหรือผู้ดูแลระบบ',
+    });
+  }
+  next();
+}
+
+// Middleware: ตรวจสอบว่าเป็น procurement หรือ admin
+function requireProcurementOrAdmin(req, res, next) {
+  if (req.user.role !== 'procurement' && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'ต้องเป็นเจ้าหน้าที่พัสดุหรือผู้ดูแลระบบ',
+    });
+  }
+  next();
+}
+
 module.exports = {
   JWT_SECRET,
   generateToken,
   authenticateToken,
   requireAdmin,
+  requireStaffOrAdmin,
+  requireProcurementOrAdmin,
 };

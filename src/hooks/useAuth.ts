@@ -9,6 +9,8 @@ interface AuthState {
   isLoggedIn: boolean;
   isLoading: boolean;
   isAdmin: boolean;
+  isStaff: boolean;
+  isProcurement: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -28,13 +30,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLoggedIn: false,
     isLoading: true,
     isAdmin: false,
+    isStaff: false,
+    isProcurement: false,
   });
 
   // ตรวจสอบ token ที่มีอยู่ตอนเริ่ม app
   useEffect(() => {
     const checkAuth = async () => {
       if (!api.isLoggedIn()) {
-        setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false });
+        setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false, isStaff: false, isProcurement: false });
         return;
       }
 
@@ -45,10 +49,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isLoggedIn: true,
           isLoading: false,
           isAdmin: user.role === 'admin',
+          isStaff: user.role === 'staff',
+          isProcurement: user.role === 'procurement',
         });
       } catch {
         api.clearToken();
-        setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false });
+        setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false, isStaff: false, isProcurement: false });
       }
     };
 
@@ -58,11 +64,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ฟัง event unauthorized / logout จาก API Client
   useEffect(() => {
     const handleUnauthorized = () => {
-      setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false });
+      setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false, isStaff: false, isProcurement: false });
     };
 
     const handleLogout = () => {
-      setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false });
+      setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false, isStaff: false, isProcurement: false });
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
@@ -81,13 +87,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoggedIn: true,
       isLoading: false,
       isAdmin: result.user.role === 'admin',
+      isStaff: result.user.role === 'staff',
+      isProcurement: result.user.role === 'procurement',
     });
     return result;
   }, []);
 
   const logout = useCallback(() => {
     api.logout();
-    setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false });
+    setState({ user: null, isLoggedIn: false, isLoading: false, isAdmin: false, isStaff: false, isProcurement: false });
   }, []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {

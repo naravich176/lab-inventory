@@ -7,20 +7,32 @@ import StaffManagement from './pages/StaffManagement';
 import ReportSummary from './pages/ReportSummary';
 import PrintInventory from './pages/PrintInventory';
 import CategoryManagement from './pages/CategoryManagement';
+import UserManagement from './pages/UserManagement';
+import Procurement from './pages/Procurement';
 import NotificationPanel from './components/NotificationPanel';
 
 // ============================================================
 // Simple page router ด้วย state
 // ============================================================
-type Page = 'home' | 'items' | 'staff' | 'report' | 'print' | 'categories';
+type Page = 'home' | 'items' | 'staff' | 'report' | 'print' | 'categories' | 'users' | 'procurement';
+
+const roleLabels: Record<string, string> = {
+  admin: 'ผู้ดูแลระบบ',
+  staff: 'เจ้าหน้าที่ปฏิบัติการ',
+  procurement: 'เจ้าหน้าที่พัสดุ',
+};
 
 const App: React.FC = () => {
-  const { user, isLoggedIn, isLoading, isAdmin, logout } = useAuth();
+  const { user, isLoggedIn, isLoading, isAdmin, isStaff, isProcurement, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [showSettings, setShowSettings] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const canManageItems = isStaff || isAdmin;
+  const canManageStaff = isAdmin;
+  const canManageCategories = isStaff || isAdmin;
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -57,6 +69,19 @@ const App: React.FC = () => {
     return <Login />;
   }
 
+  const navButton = (page: Page, label: string) => (
+    <button
+      onClick={() => setCurrentPage(page)}
+      className={`text-sm font-medium pb-1 transition-colors ${
+        currentPage === page
+          ? 'text-[#14b84b] font-semibold border-b-2 border-[#14b84b]'
+          : 'text-slate-500 hover:text-[#14b84b]'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   // login แล้ว → แสดง app ปกติ
   return (
     <>
@@ -68,56 +93,12 @@ const App: React.FC = () => {
             <h2 className="text-slate-900 text-lg font-bold tracking-tight">ระบบจัดการคลังแล็บ</h2>
           </div>
           <nav className="flex items-center gap-6">
-            <button
-              onClick={() => setCurrentPage('home')}
-              className={`text-sm font-medium pb-1 transition-colors ${
-                currentPage === 'home'
-                  ? 'text-[#14b84b] font-semibold border-b-2 border-[#14b84b]'
-                  : 'text-slate-500 hover:text-[#14b84b]'
-              }`}
-            >
-              หน้าหลัก
-            </button>
-            <button
-              onClick={() => setCurrentPage('items')}
-              className={`text-sm font-medium pb-1 transition-colors ${
-                currentPage === 'items'
-                  ? 'text-[#14b84b] font-semibold border-b-2 border-[#14b84b]'
-                  : 'text-slate-500 hover:text-[#14b84b]'
-              }`}
-            >
-              จัดการวัสดุอุปกรณ์
-            </button>
-            <button
-              onClick={() => setCurrentPage('staff')}
-              className={`text-sm font-medium pb-1 transition-colors ${
-                currentPage === 'staff'
-                  ? 'text-[#14b84b] font-semibold border-b-2 border-[#14b84b]'
-                  : 'text-slate-500 hover:text-[#14b84b]'
-              }`}
-            >
-              จัดการรายชื่อเจ้าหน้าที่
-            </button>
-            <button
-              onClick={() => setCurrentPage('report')}
-              className={`text-sm font-medium pb-1 transition-colors ${
-                currentPage === 'report'
-                  ? 'text-[#14b84b] font-semibold border-b-2 border-[#14b84b]'
-                  : 'text-slate-500 hover:text-[#14b84b]'
-              }`}
-            >
-              สรุปรายงาน
-            </button>
-            <button
-              onClick={() => setCurrentPage('print')}
-              className={`text-sm font-medium pb-1 transition-colors ${
-                currentPage === 'print'
-                  ? 'text-[#14b84b] font-semibold border-b-2 border-[#14b84b]'
-                  : 'text-slate-500 hover:text-[#14b84b]'
-              }`}
-            >
-              ปริ้นรายการ
-            </button>
+            {navButton('home', 'หน้าหลัก')}
+            {canManageItems && navButton('items', 'จัดการวัสดุอุปกรณ์')}
+            {canManageStaff && navButton('staff', 'จัดการรายชื่อเจ้าหน้าที่')}
+            {navButton('procurement', 'จัดซื้อ')}
+            {navButton('report', 'สรุปรายงาน')}
+            {navButton('print', 'ปริ้นรายการ')}
           </nav>
         </div>
         <div className="flex items-center gap-3">
@@ -128,7 +109,7 @@ const App: React.FC = () => {
             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`p-2 rounded-full transition-colors ${
-                showSettings || currentPage === 'categories'
+                showSettings || currentPage === 'categories' || currentPage === 'users'
                   ? 'bg-green-100 text-[#14b84b]'
                   : 'text-slate-500 hover:bg-slate-100'
               }`}
@@ -141,13 +122,22 @@ const App: React.FC = () => {
                 <div className="px-4 py-3 border-b border-slate-100">
                   <p className="text-sm font-bold text-slate-900">ตั้งค่าระบบ</p>
                 </div>
-                {isAdmin && (
+                {canManageCategories && (
                   <button
                     onClick={() => { setCurrentPage('categories'); setShowSettings(false); }}
                     className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-slate-50 transition-colors ${currentPage === 'categories' ? 'text-[#14b84b] font-medium' : 'text-slate-700'}`}
                   >
                     <span className="material-symbols-outlined text-lg">category</span>
                     จัดการหมวดหมู่
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => { setCurrentPage('users'); setShowSettings(false); }}
+                    className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-slate-50 transition-colors ${currentPage === 'users' ? 'text-[#14b84b] font-medium' : 'text-slate-700'}`}
+                  >
+                    <span className="material-symbols-outlined text-lg">manage_accounts</span>
+                    จัดการผู้ใช้
                   </button>
                 )}
               </div>
@@ -168,7 +158,7 @@ const App: React.FC = () => {
               <div className="text-left hidden sm:block">
                 <p className="text-sm font-medium text-slate-900 leading-tight">{user?.display_name || 'ผู้ใช้'}</p>
                 <p className="text-[10px] text-slate-400 leading-tight">
-                  {user?.role === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน'}
+                  {roleLabels[user?.role || ''] || user?.role}
                 </p>
               </div>
               <span className="material-symbols-outlined text-slate-400 text-sm">expand_more</span>
@@ -214,6 +204,12 @@ const App: React.FC = () => {
       )}
       {currentPage === 'categories' && (
         <CategoryManagement onNavigateHome={() => setCurrentPage('home')} />
+      )}
+      {currentPage === 'users' && (
+        <UserManagement onNavigateHome={() => setCurrentPage('home')} />
+      )}
+      {currentPage === 'procurement' && (
+        <Procurement onNavigateHome={() => setCurrentPage('home')} />
       )}
     </>
   );

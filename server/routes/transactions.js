@@ -4,12 +4,12 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, requireStaffOrAdmin } = require('../middleware/auth');
 
 router.use(authenticateToken);
 
-// POST /api/transactions/withdraw — ทุก role ทำได้
-router.post('/withdraw', (req, res, next) => {
+// POST /api/transactions/withdraw — staff + admin
+router.post('/withdraw', requireStaffOrAdmin, (req, res, next) => {
   try {
     const { item_id, staff_id, quantity, note = '' } = req.body;
 

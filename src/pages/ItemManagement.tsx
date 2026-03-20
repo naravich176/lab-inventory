@@ -115,7 +115,8 @@ interface ItemManagementProps {
 }
 
 const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isStaff } = useAuth();
+  const canEdit = isStaff || isAdmin;
   // View mode: 'list' | 'add' | 'edit'
   const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -291,7 +292,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">จัดการวัสดุอุปกรณ์</h2>
             <p className="text-slate-500 text-sm mt-1">เพิ่ม แก้ไข และจัดการรายการวัสดุทั้งหมดในระบบ</p>
           </div>
-          {isAdmin && (
+          {canEdit && (
             <button
               onClick={goAdd}
               className="px-5 py-2.5 bg-[#14b84b] hover:bg-[#0ea53e] text-white font-bold text-sm rounded-lg shadow-lg shadow-green-500/20 flex items-center gap-2 transition-all"
@@ -349,7 +350,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
               <input
                 type="text"
-                placeholder="ค้นหาชื่อหรือรหัส..."
+                placeholder="ค้นหาชื่อหรือรหัสวัสดุ..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] transition-all w-64"
@@ -427,7 +428,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
                         </td>
                         <td className="px-5 py-3.5 text-sm text-slate-500">{formatDate(item.updated_at)}</td>
                         <td className="px-5 py-3.5">
-                          {isAdmin && (
+                          {canEdit && (
                           <div className="relative flex items-center justify-end gap-1" ref={openMenuId === item.id ? menuRef : undefined}>
                             <button
                               onClick={() => goEdit(item)}

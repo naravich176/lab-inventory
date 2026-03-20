@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { Category, Item, Staff, ItemFilters } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import './Home.css'; // แยก CSS สำหรับ Home page
 
 // ============================================================
@@ -334,6 +335,9 @@ interface HomeProps {
 }
 
 const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
+  const { isAdmin, isStaff } = useAuth();
+  const canWithdraw = isStaff || isAdmin;
+
   // State — data
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -554,7 +558,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-[65%] text-slate-400 text-lg">search</span>
                   <input
                     type="text"
-                    placeholder="ค้นหารายการวัสดุ..."
+                    placeholder="ค้นหาชื่อหรือรหัสวัสดุ..."
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] transition-all w-64"
@@ -572,6 +576,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                     <th className="px-6 py-4 font-bold border-b border-slate-200">ลำดับที่</th>
+                    <th className="px-6 py-4 font-bold border-b border-slate-200">รหัส</th>
                     <th className="px-6 py-4 font-bold border-b border-slate-200">รายการวัสดุ</th>
                     <th className="px-6 py-4 font-bold border-b border-slate-200">สถานะ</th>
                     <th className="px-6 py-4 font-bold border-b border-slate-200 text-center">คงเหลือ</th>
@@ -585,6 +590,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                     Array.from({ length: 4 }).map((_, i) => (
                       <tr key={`skeleton-${i}`}>
                         <td className="px-6 py-4"><div className="h-4 w-8 bg-slate-200 rounded animate-pulse"></div></td>
+                        <td className="px-6 py-4"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse"></div></td>
                         <td className="px-6 py-4"><div className="h-4 w-48 bg-slate-200 rounded animate-pulse"></div></td>
                         <td className="px-6 py-4"><div className="h-5 w-16 bg-slate-200 rounded-full animate-pulse"></div></td>
                         <td className="px-6 py-4"><div className="h-4 w-16 bg-slate-200 rounded animate-pulse mx-auto"></div></td>
@@ -594,7 +600,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                     ))
                   ) : items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-16 text-center">
+                      <td colSpan={7} className="px-6 py-16 text-center">
                         <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">inventory_2</span>
                         <p className="text-slate-400 text-sm">
                           {debouncedSearch ? 'ไม่พบรายการที่ค้นหา' : 'ยังไม่มีรายการวัสดุในหมวดนี้'}
@@ -610,11 +616,11 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                           <td className="px-6 py-4 text-sm font-medium text-slate-500">
                             {String(rowNum).padStart(2, '0')}
                           </td>
+                          <td className="px-6 py-4 text-sm text-slate-500 font-mono">
+                            {item.cat_code}
+                          </td>
                           <td className="px-6 py-4">
-                            <div className="flex flex-col">
-                              <span className="font-bold text-slate-900">{item.name}</span>
-                              <span className="text-xs text-slate-400">CAT: {item.cat_code}</span>
-                            </div>
+                            <span className="font-bold text-slate-900">{item.name}</span>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>
@@ -628,17 +634,19 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                           <td className="px-6 py-4 text-sm text-slate-500">{formatDate(item.updated_at)}</td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => {
-                                  if (item.current_stock <= 0) return;
-                                  setWithdrawError(null);
-                                  setWithdrawItem(item);
-                                }}
-                                disabled={item.current_stock <= 0}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-[#14b84b] hover:bg-[#14b84b] hover:text-white rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-green-50 disabled:hover:text-[#14b84b]"
-                              >
-                                <span className="material-symbols-outlined text-sm">outbox</span> เบิกใช้
-                              </button>
+                              {canWithdraw && (
+                                <button
+                                  onClick={() => {
+                                    if (item.current_stock <= 0) return;
+                                    setWithdrawError(null);
+                                    setWithdrawItem(item);
+                                  }}
+                                  disabled={item.current_stock <= 0}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-[#14b84b] hover:bg-[#14b84b] hover:text-white rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-green-50 disabled:hover:text-[#14b84b]"
+                                >
+                                  <span className="material-symbols-outlined text-sm">outbox</span> เบิกใช้
+                                </button>
+                              )}
                               <button className="p-1 text-slate-400 hover:text-[#14b84b] transition-colors">
                                 <span className="material-symbols-outlined">more_vert</span>
                               </button>

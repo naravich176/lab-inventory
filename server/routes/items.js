@@ -4,7 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireStaffOrAdmin } = require('../middleware/auth');
 
 router.use(authenticateToken);
 
@@ -39,7 +39,7 @@ router.get('/:id', (req, res, next) => {
 });
 
 // POST /api/items — admin only
-router.post('/', requireAdmin, (req, res, next) => {
+router.post('/', requireStaffOrAdmin, (req, res, next) => {
   try {
     const { name, cat_code, unit, min_stock = 0, current_stock = 0, category_id, description = '' } = req.body;
 
@@ -67,7 +67,7 @@ router.post('/', requireAdmin, (req, res, next) => {
 });
 
 // PUT /api/items/:id — admin only
-router.put('/:id', requireAdmin, (req, res, next) => {
+router.put('/:id', requireStaffOrAdmin, (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const existing = db.getItemById(id);
@@ -95,7 +95,7 @@ router.put('/:id', requireAdmin, (req, res, next) => {
 });
 
 // DELETE /api/items/:id — admin only
-router.delete('/:id', requireAdmin, (req, res, next) => {
+router.delete('/:id', requireStaffOrAdmin, (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const existing = db.getItemById(id);

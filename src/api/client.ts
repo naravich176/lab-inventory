@@ -105,7 +105,7 @@ export interface User {
   id: number;
   username: string;
   display_name: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'staff' | 'procurement';
   status: string;
   created_at: string;
   updated_at: string;
@@ -135,6 +135,36 @@ export interface TransactionFilters {
   type?: string;
   startDate?: string;
   endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ProcurementRequest {
+  id: number;
+  item_id: number | null;
+  item_name: string;
+  quantity: number;
+  unit: string;
+  reason: string;
+  requested_by: number;
+  requested_by_name: string;
+  status: 'requested' | 'ordering' | 'shipping' | 'delivered';
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaginatedProcurement {
+  requests: ProcurementRequest[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ProcurementFilters {
+  status?: string;
+  requested_by?: number;
   page?: number;
   limit?: number;
 }
@@ -415,6 +445,57 @@ class ApiClient {
 
   async getDashboardStats(): Promise<DashboardStats> {
     return this.request<DashboardStats>('GET', '/api/reports/dashboard');
+  }
+
+  // ============================================================
+  // Users (admin)
+  // ============================================================
+
+  async getUsers(): Promise<User[]> {
+    return this.request<User[]>('GET', '/api/users');
+  }
+
+  async createUser(data: { username: string; password: string; display_name: string; role: string }): Promise<User> {
+    return this.request<User>('POST', '/api/users', data);
+  }
+
+  async updateUser(id: number, data: { display_name?: string; role?: string; status?: string }): Promise<User> {
+    return this.request<User>('PUT', `/api/users/${id}`, data);
+  }
+
+  async resetUserPassword(id: number, new_password: string): Promise<User> {
+    return this.request<User>('PUT', `/api/users/${id}/reset-password`, { new_password });
+  }
+
+  // ============================================================
+  // Procurement
+  // ============================================================
+
+  async getProcurementRequests(filters?: ProcurementFilters): Promise<PaginatedProcurement> {
+    const query = this.buildQuery(filters || {});
+    return this.request<PaginatedProcurement>('GET', `/api/procurement${query}`);
+  }
+
+  async getProcurementRequestById(id: number): Promise<ProcurementRequest> {
+    return this.request<ProcurementRequest>('GET', `/api/procurement/${id}`);
+  }
+
+  async createProcurementRequest(data: {
+    item_id?: number | null;
+    item_name: string;
+    quantity: number;
+    unit?: string;
+    reason?: string;
+  }): Promise<ProcurementRequest> {
+    return this.request<ProcurementRequest>('POST', '/api/procurement', data);
+  }
+
+  async updateProcurementStatus(id: number, data: { status: string; note?: string }): Promise<ProcurementRequest> {
+    return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/status`, data);
+  }
+
+  async deleteProcurementRequest(id: number): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>('DELETE', `/api/procurement/${id}`);
   }
 }
 

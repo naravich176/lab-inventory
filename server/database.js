@@ -99,10 +99,27 @@ function createTables() {
       username      TEXT    NOT NULL UNIQUE,
       password_hash TEXT    NOT NULL,
       display_name  TEXT    NOT NULL,
-      role          TEXT    NOT NULL DEFAULT 'user',
+      role          TEXT    NOT NULL DEFAULT 'staff',
       status        TEXT    DEFAULT 'active',
       created_at    TEXT    DEFAULT (datetime('now','localtime')),
       updated_at    TEXT    DEFAULT (datetime('now','localtime'))
+    );
+
+    -- คำขอจัดซื้อ
+    CREATE TABLE IF NOT EXISTS procurement_requests (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id       INTEGER,
+      item_name     TEXT    NOT NULL,
+      quantity      INTEGER NOT NULL DEFAULT 1,
+      unit          TEXT    DEFAULT 'ชิ้น',
+      reason        TEXT    DEFAULT '',
+      requested_by  INTEGER NOT NULL,
+      status        TEXT    NOT NULL DEFAULT 'requested',
+      note          TEXT    DEFAULT '',
+      created_at    TEXT    DEFAULT (datetime('now','localtime')),
+      updated_at    TEXT    DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE SET NULL,
+      FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE RESTRICT
     );
 
     -- Indexes สำหรับ query ที่ใช้บ่อย
@@ -113,6 +130,8 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
     CREATE INDEX IF NOT EXISTS idx_staff_status      ON staff(status);
     CREATE INDEX IF NOT EXISTS idx_users_username    ON users(username);
+    CREATE INDEX IF NOT EXISTS idx_procurement_status ON procurement_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_procurement_requested_by ON procurement_requests(requested_by);
   `);
 }
 
@@ -520,7 +539,7 @@ function getUsers() {
   `).all();
 }
 
-function createUser({ username, password, display_name, role = 'user' }) {
+function createUser({ username, password, display_name, role = 'staff' }) {
   const existing = getUserByUsername(username);
   if (existing) {
     throw new Error('ชื่อผู้ใช้นี้มีอยู่แล้ว');
@@ -540,6 +559,25 @@ function createUser({ username, password, display_name, role = 'user' }) {
   return getUserById(result.lastInsertRowid);
 }
 
+function updateUser(id, data) {
+  const user = getUserById(id);
+  if (!user) throw new Error('ไม่พบผู้ใช้');
+
+  const stmt = db.prepare(`
+    UPDATE users
+    SET display_name = @display_name, role = @role, status = @status,
+        updated_at = datetime('now','localtime')
+    WHERE id = @id
+  `);
+  stmt.run({
+    id,
+    display_name: data.display_name ?? user.display_name,
+    role: data.role ?? user.role,
+    status: data.status ?? user.status,
+  });
+  return getUserById(id);
+}
+
 function updatePassword(id, newPassword) {
   const hash = bcrypt.hashSync(newPassword, SALT_ROUNDS);
   db.prepare(`
@@ -555,7 +593,99 @@ function verifyPassword(plainPassword, hash) {
 }
 
 // ============================================================
-// 9) Close DB
+// 9) Procurement Requests
+// ============================================================
+function createProcurementRequest(data) {
+  const stmt = db.prepare(`
+    INSERT INTO procurement_requests (item_id, item_name, quantity, unit, reason, requested_by)
+    VALUES (@item_id, @item_name, @quantity, @unit, @reason, @requested_by)
+  `);
+  const result = stmt.run({
+    item_id: data.item_id || null,
+    item_name: data.item_name,
+    quantity: data.quantity || 1,
+    unit: data.unit || 'ชิ้น',
+    reason: data.reason || '',
+    requested_by: data.requested_by,
+  });
+  return getProcurementRequestById(result.lastInsertRowid);
+}
+
+function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } = {}) {
+  let where = ['1=1'];
+  let params = {};
+
+  if (status) {
+    where.push('pr.status = @status');
+    params.status = status;
+  }
+  if (requested_by) {
+    where.push('pr.requested_by = @requested_by');
+    params.requested_by = requested_by;
+  }
+
+  const whereClause = where.join(' AND ');
+  const offset = (page - 1) * limit;
+
+  const countRow = db.prepare(`
+    SELECT COUNT(*) as total FROM procurement_requests pr WHERE ${whereClause}
+  `).get(params);
+
+  const requests = db.prepare(`
+    SELECT pr.*, u.display_name as requested_by_name
+    FROM procurement_requests pr
+    LEFT JOIN users u ON pr.requested_by = u.id
+    WHERE ${whereClause}
+    ORDER BY pr.id DESC
+    LIMIT @limit OFFSET @offset
+  `).all({ ...params, limit, offset });
+
+  return {
+    requests,
+    total: countRow.total,
+    page,
+    limit,
+    totalPages: Math.ceil(countRow.total / limit),
+  };
+}
+
+function getProcurementRequestById(id) {
+  return db.prepare(`
+    SELECT pr.*, u.display_name as requested_by_name
+    FROM procurement_requests pr
+    LEFT JOIN users u ON pr.requested_by = u.id
+    WHERE pr.id = ?
+  `).get(id);
+}
+
+function updateProcurementStatus(id, { status, note }) {
+  const existing = getProcurementRequestById(id);
+  if (!existing) throw new Error('ไม่พบคำขอจัดซื้อ');
+
+  db.prepare(`
+    UPDATE procurement_requests
+    SET status = @status, note = @note, updated_at = datetime('now','localtime')
+    WHERE id = @id
+  `).run({
+    id,
+    status,
+    note: note ?? existing.note,
+  });
+  return getProcurementRequestById(id);
+}
+
+function deleteProcurementRequest(id) {
+  const existing = getProcurementRequestById(id);
+  if (!existing) throw new Error('ไม่พบคำขอจัดซื้อ');
+  if (existing.status !== 'requested') {
+    throw new Error('ลบได้เฉพาะคำขอที่มีสถานะ "แจ้งคำขอ" เท่านั้น');
+  }
+  db.prepare('DELETE FROM procurement_requests WHERE id = ?').run(id);
+  return { deleted: true };
+}
+
+// ============================================================
+// 10) Close DB
 // ============================================================
 function closeDatabase() {
   if (db) {
@@ -597,11 +727,18 @@ module.exports = {
   getLowStockItems,
   getMonthlySummary,
   getDashboardStats,
-  // Users / Auth (ใหม่)
+  // Users / Auth
   getUserByUsername,
   getUserById,
   getUsers,
   createUser,
+  updateUser,
   updatePassword,
   verifyPassword,
+  // Procurement
+  createProcurementRequest,
+  getProcurementRequests,
+  getProcurementRequestById,
+  updateProcurementStatus,
+  deleteProcurementRequest,
 };
