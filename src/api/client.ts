@@ -32,6 +32,8 @@ export interface Item {
   category_id: number;
   description: string;
   status: string;
+  expiry_date: string | null;
+  expiry_alert_days: number;
   created_at: string;
   updated_at: string;
   category_name?: string;
@@ -408,6 +410,10 @@ class ApiClient {
     return this.request<Item[]>('GET', '/api/reports/low-stock');
   }
 
+  async getExpiringItems(): Promise<Item[]> {
+    return this.request<Item[]>('GET', '/api/reports/expiring-items');
+  }
+
   async getMonthlySummary(year: number, month: number): Promise<MonthlySummary[]> {
     return this.request<MonthlySummary[]>(
       'GET',
@@ -474,6 +480,8 @@ class ApiClient {
     min_stock?: number;
     category_id: number;
     description?: string;
+    expiry_date?: string | null;
+    expiry_alert_days?: number;
   }): Promise<ProcurementRequest> {
     return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/receive`, {
       new_item: newItem || undefined,

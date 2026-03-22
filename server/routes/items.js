@@ -43,7 +43,7 @@ router.get('/:id', (req, res, next) => {
 // POST /api/items — admin only
 router.post('/', requireStaffOrAdmin, (req, res, next) => {
   try {
-    const { name, cat_code, unit, min_stock = 0, current_stock = 0, category_id, description = '', user_id } = req.body;
+    const { name, cat_code, unit, min_stock = 0, current_stock = 0, category_id, description = '', user_id, expiry_date, expiry_alert_days } = req.body;
 
     if (!name || !cat_code || !category_id) {
       return res.status(400).json({
@@ -60,6 +60,8 @@ router.post('/', requireStaffOrAdmin, (req, res, next) => {
       current_stock: user_id && stockQty > 0 ? 0 : stockQty,
       category_id: Number(category_id),
       description,
+      expiry_date: expiry_date || null,
+      expiry_alert_days: expiry_alert_days != null ? Number(expiry_alert_days) : 30,
     });
 
     // ถ้ามี user_id และ stock > 0 → สร้าง transaction record
@@ -105,6 +107,8 @@ router.put('/:id', requireStaffOrAdmin, (req, res, next) => {
       current_stock: updateStock,
       category_id: req.body.category_id != null ? Number(req.body.category_id) : existing.category_id,
       description: req.body.description ?? existing.description,
+      expiry_date: req.body.expiry_date !== undefined ? (req.body.expiry_date || null) : existing.expiry_date,
+      expiry_alert_days: req.body.expiry_alert_days != null ? Number(req.body.expiry_alert_days) : (existing.expiry_alert_days ?? 30),
     });
 
     // ถ้ามี user_id และ stock เปลี่ยน → สร้าง transaction

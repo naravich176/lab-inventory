@@ -478,10 +478,16 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
   const [unit, setUnit] = useState(request.unit || 'ชิ้น');
   const [minStock, setMinStock] = useState(0);
   const [categoryId, setCategoryId] = useState<number>(0);
-  const [description, setDescription] = useState('');
+  const [size, setSize] = useState('');
+  const [grade, setGrade] = useState('');
+  const [brand, setBrand] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [expiryAlertDays, setExpiryAlertDays] = useState(30);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const commonUnits = ['ขวด', 'กก.', 'ชิ้น', 'แพ็ค', 'กล่อง', 'ม้วน', 'อัน', 'แผ่น', 'ลิตร', 'ml'];
 
   useEffect(() => {
     async function fetchData() {
@@ -509,7 +515,9 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
         unit: unit.trim() || 'ชิ้น',
         min_stock: minStock,
         category_id: categoryId,
-        description: description.trim(),
+        description: [size.trim(), grade.trim(), brand.trim()].join('|'),
+        expiry_date: expiryDate || null,
+        expiry_alert_days: expiryAlertDays,
       });
       onSave();
     } catch (err: any) {
@@ -524,7 +532,7 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in max-h-[90vh] overflow-y-auto">
         <div className="bg-gradient-to-r from-[#14b84b] to-[#0ea53e] px-6 py-5 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -558,6 +566,12 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
             </div>
           </div>
 
+          {/* ข้อมูลพื้นฐาน */}
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm text-[#14b84b]">edit_note</span>
+            ข้อมูลวัสดุอุปกรณ์
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               ชื่อวัสดุ <span className="text-red-500">*</span>
@@ -568,17 +582,10 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                รหัสวัสดุ (cat_code) <span className="text-red-500">*</span>
+                รหัสวัสดุ (CAT Code) <span className="text-red-500">*</span>
               </label>
-              <input type="text" value={catCode} onChange={e => setCatCode(e.target.value)} placeholder="เช่น CHM-001" className={inputClass} autoFocus />
+              <input type="text" value={catCode} onChange={e => setCatCode(e.target.value.toUpperCase())} placeholder="เช่น CH-00125" className={inputClass} autoFocus />
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">หน่วย</label>
-              <input type="text" value={unit} onChange={e => setUnit(e.target.value)} className={inputClass} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 หมวดหมู่ <span className="text-red-500">*</span>
@@ -589,15 +596,89 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">จุดสั่งซื้อ (min_stock)</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">หน่วยนับ</label>
+              <input type="text" value={unit} onChange={e => setUnit(e.target.value)} placeholder="เช่น ขวด, กก., ชิ้น" className={inputClass} list="receive-unit-options" />
+              <datalist id="receive-unit-options">
+                {commonUnits.map(u => <option key={u} value={u} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">แจ้งเตือนเมื่อเหลือต่ำกว่า</label>
               <input type="number" min={0} value={minStock} onChange={e => setMinStock(Math.max(0, parseInt(e.target.value) || 0))} className={inputClass} />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">รายละเอียด</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="รายละเอียดเพิ่มเติม (ไม่บังคับ)" rows={2} className={inputClass + ' resize-none'} />
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">ขนาด</label>
+              <input type="text" value={size} onChange={e => setSize(e.target.value)} placeholder="เช่น 500ml, 1kg" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">เกรด</label>
+              <select value={grade} onChange={e => setGrade(e.target.value)} className={inputClass}>
+                <option value="">เลือกเกรด (ถ้ามี)</option>
+                <option value="Analytical Reagent (AR)">Analytical Reagent (AR)</option>
+                <option value="Laboratory Grade">Laboratory Grade</option>
+                <option value="General Purpose">General Purpose</option>
+                <option value="ACS Grade">ACS Grade</option>
+                <option value="HPLC Grade">HPLC Grade</option>
+                <option value="Food Grade">Food Grade</option>
+                <option value="Technical Grade">Technical Grade</option>
+                <option value="อื่นๆ">อื่นๆ</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">ยี่ห้อ</label>
+              <input type="text" value={brand} onChange={e => setBrand(e.target.value)} placeholder="เช่น Merck, Sigma" className={inputClass} />
+            </div>
+          </div>
+
+          {/* วันหมดอายุ */}
+          <div className="border-t border-slate-100 pt-4">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2 mb-4">
+              <span className="material-symbols-outlined text-sm text-[#14b84b]">event</span>
+              วันหมดอายุ (ถ้ามี)
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">วันหมดอายุ</label>
+                <input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} className={inputClass} />
+                <p className="text-xs text-slate-400 mt-1">ไม่บังคับ — เว้นว่างถ้าไม่มีวันหมดอายุ</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">แจ้งเตือนล่วงหน้า (วัน)</label>
+                <input type="number" min={1} value={expiryAlertDays} onChange={e => setExpiryAlertDays(Math.max(1, parseInt(e.target.value) || 30))} className={inputClass + ' text-center'} />
+                <p className="text-xs text-slate-400 mt-1">แจ้งเตือนก่อนหมดอายุกี่วัน (default: 30)</p>
+              </div>
+            </div>
+            {expiryDate && (
+              <div className="mt-3">
+                {(() => {
+                  const today = new Date(); today.setHours(0, 0, 0, 0);
+                  const exp = new Date(expiryDate + 'T00:00:00');
+                  const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  if (diffDays < 0) return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                      <span className="w-2 h-2 rounded-full bg-red-500"></span> หมดอายุแล้ว ({Math.abs(diffDays)} วัน)
+                    </span>
+                  );
+                  if (diffDays <= expiryAlertDays) return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span> ใกล้หมดอายุ ({diffDays} วัน)
+                    </span>
+                  );
+                  return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span> ยังไม่หมดอายุ ({diffDays} วัน)
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {error && (

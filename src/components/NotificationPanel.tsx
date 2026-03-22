@@ -2,9 +2,21 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { Item } from '../api/client';
 
-function getItemStatus(item: Item): 'หมด' | 'ใกล้หมด' {
-  if (item.current_stock <= 0) return 'หมด';
-  return 'ใกล้หมด';
+// ============================================================
+// Expiry helpers
+// ============================================================
+function getExpiryDaysLeft(item: Item): number | null {
+  if (!item.expiry_date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(item.expiry_date + 'T00:00:00');
+  return Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function formatExpiryDate(dateStr: string): string {
+  try {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch { return dateStr; }
 }
 
 // ============================================================
@@ -17,6 +29,7 @@ interface NotificationPanelProps {
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }) => {
   const [open, setOpen] = useState(false);
   const [lowStockItems, setLowStockItems] = useState<Item[]>([]);
+  const [expiringItems, setExpiringItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -31,12 +44,16 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Fetch low stock items
-  const fetchLowStock = useCallback(async () => {
+  // Fetch notifications
+  const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.getLowStockItems();
-      setLowStockItems(data);
+      const [lowStock, expiring] = await Promise.all([
+        api.getLowStockItems(),
+        api.getExpiringItems(),
+      ]);
+      setLowStockItems(lowStock);
+      setExpiringItems(expiring);
     } catch (err) {
       console.error(err);
     } finally {
@@ -46,19 +63,29 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
 
   // Fetch on mount and periodically (every 60s)
   useEffect(() => {
-    fetchLowStock();
-    const interval = setInterval(fetchLowStock, 60000);
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
-  }, [fetchLowStock]);
+  }, [fetchNotifications]);
 
   // Refetch when panel opens
   useEffect(() => {
-    if (open) fetchLowStock();
-  }, [open, fetchLowStock]);
+    if (open) fetchNotifications();
+  }, [open, fetchNotifications]);
 
   const outOfStock = lowStockItems.filter(i => i.current_stock <= 0);
   const almostOut = lowStockItems.filter(i => i.current_stock > 0);
-  const totalAlerts = lowStockItems.length;
+
+  const expiredItems = expiringItems.filter(i => {
+    const days = getExpiryDaysLeft(i);
+    return days !== null && days < 0;
+  });
+  const soonExpiring = expiringItems.filter(i => {
+    const days = getExpiryDaysLeft(i);
+    return days !== null && days >= 0;
+  });
+
+  const totalAlerts = lowStockItems.length + expiringItems.length;
 
   return (
     <div className="relative" ref={panelRef}>
@@ -82,13 +109,13 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-amber-500">warning</span>
-              <h3 className="font-bold text-slate-900 text-sm">แจ้งเตือนวัสดุใกล้หมด</h3>
+              <h3 className="font-bold text-slate-900 text-sm">แจ้งเตือน</h3>
             </div>
             <span className="text-xs text-slate-400">{totalAlerts} รายการ</span>
           </div>
 
           {/* Content */}
-          <div className="max-h-[400px] overflow-y-auto">
+          <div className="max-h-[500px] overflow-y-auto">
             {loading ? (
               <div className="p-6 space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -107,26 +134,101 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
                   <span className="material-symbols-outlined text-[#14b84b] text-2xl">check_circle</span>
                 </div>
                 <p className="text-sm font-medium text-slate-900 mb-1">ไม่มีรายการแจ้งเตือน</p>
-                <p className="text-xs text-slate-400">วัสดุทุกรายการมีสต็อกเพียงพอ</p>
+                <p className="text-xs text-slate-400">วัสดุทุกรายการมีสต็อกเพียงพอและยังไม่หมดอายุ</p>
               </div>
             ) : (
               <>
-                {/* Out of stock section */}
+                {/* ===== EXPIRY SECTION ===== */}
+
+                {/* Expired items */}
+                {expiredItems.length > 0 && (
+                  <div>
+                    <div className="px-5 py-2 bg-red-50 border-b border-red-100">
+                      <span className="text-xs font-bold text-red-700 uppercase tracking-wider">
+                        หมดอายุแล้ว ({expiredItems.length})
+                      </span>
+                    </div>
+                    {expiredItems.map(item => {
+                      const daysLeft = getExpiryDaysLeft(item)!;
+                      return (
+                        <div
+                          key={`exp-${item.id}`}
+                          className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
+                          onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
+                        >
+                          <div className="w-9 h-9 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span className="material-symbols-outlined text-red-500 text-lg">event_busy</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">CAT: {item.cat_code}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                                หมดอายุแล้ว {Math.abs(daysLeft)} วัน
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                หมดอายุ: {formatExpiryDate(item.expiry_date!)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Soon expiring items */}
+                {soonExpiring.length > 0 && (
+                  <div>
+                    <div className="px-5 py-2 bg-amber-50 border-b border-amber-100">
+                      <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                        ใกล้หมดอายุ ({soonExpiring.length})
+                      </span>
+                    </div>
+                    {soonExpiring.map(item => {
+                      const daysLeft = getExpiryDaysLeft(item)!;
+                      return (
+                        <div
+                          key={`exp-soon-${item.id}`}
+                          className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
+                          onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
+                        >
+                          <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span className="material-symbols-outlined text-amber-500 text-lg">schedule</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">CAT: {item.cat_code}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+                                เหลือ {daysLeft} วัน
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                หมดอายุ: {formatExpiryDate(item.expiry_date!)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ===== LOW STOCK SECTION ===== */}
+
+                {/* Out of stock */}
                 {outOfStock.length > 0 && (
                   <div>
                     <div className="px-5 py-2 bg-red-50 border-b border-red-100">
                       <span className="text-xs font-bold text-red-700 uppercase tracking-wider">
-                        หมดแล้ว ({outOfStock.length})
+                        สต็อกหมด ({outOfStock.length})
                       </span>
                     </div>
                     {outOfStock.map(item => (
                       <div
-                        key={item.id}
+                        key={`stock-${item.id}`}
                         className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
-                        onClick={() => {
-                          setOpen(false);
-                          if (onNavigateItems) onNavigateItems();
-                        }}
+                        onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
                       >
                         <div className="w-9 h-9 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
                           <span className="material-symbols-outlined text-red-500 text-lg">error</span>
@@ -147,24 +249,21 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
                   </div>
                 )}
 
-                {/* Almost out section */}
+                {/* Almost out */}
                 {almostOut.length > 0 && (
                   <div>
                     <div className="px-5 py-2 bg-amber-50 border-b border-amber-100">
                       <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
-                        ใกล้หมด ({almostOut.length})
+                        สต็อกใกล้หมด ({almostOut.length})
                       </span>
                     </div>
                     {almostOut.map(item => {
                       const percent = Math.round((item.current_stock / Math.max(item.min_stock, 1)) * 100);
                       return (
                         <div
-                          key={item.id}
+                          key={`stock-low-${item.id}`}
                           className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
-                          onClick={() => {
-                            setOpen(false);
-                            if (onNavigateItems) onNavigateItems();
-                          }}
+                          onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
                         >
                           <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
                             <span className="material-symbols-outlined text-amber-500 text-lg">inventory_2</span>
@@ -198,10 +297,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
           {totalAlerts > 0 && (
             <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
               <button
-                onClick={() => {
-                  setOpen(false);
-                  if (onNavigateItems) onNavigateItems();
-                }}
+                onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
                 className="w-full text-center text-xs font-bold text-[#14b84b] hover:text-[#0ea53e] transition-colors py-1"
               >
                 ดูรายการวัสดุทั้งหมด →

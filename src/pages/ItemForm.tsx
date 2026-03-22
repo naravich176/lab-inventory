@@ -32,6 +32,8 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
   const [size, setSize] = useState('');
   const [grade, setGrade] = useState('');
   const [brand, setBrand] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [expiryAlertDays, setExpiryAlertDays] = useState<number>(30);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -73,6 +75,8 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
       setSize(parts[0] || '');
       setGrade(parts[1] || '');
       setBrand(parts[2] || '');
+      setExpiryDate(editItem.expiry_date || '');
+      setExpiryAlertDays(editItem.expiry_alert_days ?? 30);
     }
   }, [editItem]);
 
@@ -111,6 +115,8 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
       current_stock: currentStock,
       min_stock: minStock,
       description: [size.trim(), grade.trim(), brand.trim()].join('|'),
+      expiry_date: expiryDate || null,
+      expiry_alert_days: expiryAlertDays,
     };
 
     // ส่ง user_id เพื่อบันทึกประวัติการเคลื่อนไหว
@@ -371,6 +377,69 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
                   </div>
                 </div>
 
+              </div>
+            </div>
+
+            {/* วันหมดอายุ */}
+            <div className="border-t border-slate-100 pt-6">
+              <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg text-[#14b84b]">event</span>
+                วันหมดอายุ (ถ้ามี)
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5">
+                <div>
+                  <label className={labelClass}>วันหมดอายุ</label>
+                  <input
+                    type="date"
+                    value={expiryDate}
+                    onChange={e => setExpiryDate(e.target.value)}
+                    className={inputClass() + " text-slate-900"}
+                  />
+                  <p className="text-xs text-slate-400 mt-1">ไม่บังคับ — เว้นว่างถ้าไม่มีวันหมดอายุ</p>
+                </div>
+                <div>
+                  <label className={labelClass}>แจ้งเตือนล่วงหน้า (วัน)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={expiryAlertDays}
+                    onChange={e => setExpiryAlertDays(Math.max(1, parseInt(e.target.value) || 30))}
+                    className={inputClass() + " text-slate-900 text-center"}
+                  />
+                  <p className="text-xs text-slate-400 mt-1">แจ้งเตือนก่อนหมดอายุกี่วัน (default: 30)</p>
+                </div>
+                {expiryDate && (
+                  <div>
+                    <label className={labelClass}>สถานะ (คำนวณอัตโนมัติ)</label>
+                    <div className="px-4 py-2.5 rounded-lg border border-slate-100 bg-slate-50 text-center">
+                      {(() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const exp = new Date(expiryDate + 'T00:00:00');
+                        const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        if (diffDays < 0) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span> หมดอายุแล้ว ({Math.abs(diffDays)} วัน)
+                            </span>
+                          );
+                        } else if (diffDays <= expiryAlertDays) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                              <span className="w-2 h-2 rounded-full bg-amber-500"></span> ใกล้หมดอายุ ({diffDays} วัน)
+                            </span>
+                          );
+                        } else {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span> ยังไม่หมดอายุ ({diffDays} วัน)
+                            </span>
+                          );
+                        }
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

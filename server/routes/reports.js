@@ -19,6 +19,16 @@ router.get('/low-stock', (req, res, next) => {
   }
 });
 
+// GET /api/reports/expiring-items
+router.get('/expiring-items', (req, res, next) => {
+  try {
+    const items = db.getExpiringItems();
+    res.json({ success: true, data: items });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/reports/monthly?year=&month=
 router.get('/monthly', (req, res, next) => {
   try {

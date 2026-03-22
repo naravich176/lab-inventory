@@ -10,6 +10,17 @@ function getItemStatus(item: Item): string {
   return 'ปกติ';
 }
 
+function getExpiryStatus(item: Item): 'expired' | 'soon' | null {
+  if (!item.expiry_date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(item.expiry_date + 'T00:00:00');
+  const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return 'expired';
+  if (diffDays <= (item.expiry_alert_days || 30)) return 'soon';
+  return null;
+}
+
 const statusStyle: Record<string, string> = {
   ปกติ: 'bg-green-100 text-green-800',
   ใกล้หมด: 'bg-amber-100 text-amber-800',
@@ -418,9 +429,17 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
                           )}
                         </td>
                         <td className="px-5 py-3.5">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyle[status]}`}>
-                            {status}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${statusStyle[status]}`}>
+                              {status}
+                            </span>
+                            {getExpiryStatus(item) === 'expired' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold w-fit bg-red-100 text-red-700">หมดอายุ</span>
+                            )}
+                            {getExpiryStatus(item) === 'soon' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold w-fit bg-amber-100 text-amber-700">ใกล้หมดอายุ</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-3.5 text-center">
                           <span className={`font-bold ${quantityColor[status]}`}>{item.current_stock}</span>

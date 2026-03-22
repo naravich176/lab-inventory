@@ -31,6 +31,7 @@ function initDatabase(dbPath) {
   db.pragma('foreign_keys = ON');
 
   createTables();
+  migrateSchema();
   seedDefaultCategories();
   seedDefaultAdmin();
 
@@ -130,6 +131,24 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_procurement_requested_by ON procurement_requests(requested_by);
   `);
 
+}
+
+// ============================================================
+// 1.5) Safe Migrations (ALTER TABLE ADD COLUMN ถ้ายังไม่มี)
+// ============================================================
+function migrateSchema() {
+  const columns = db.prepare("PRAGMA table_info(items)").all().map(c => c.name);
+
+  if (!columns.includes('expiry_date')) {
+    db.exec("ALTER TABLE items ADD COLUMN expiry_date TEXT DEFAULT NULL");
+    console.log('Migration: added items.expiry_date');
+  }
+  if (!columns.includes('expiry_alert_days')) {
+    db.exec("ALTER TABLE items ADD COLUMN expiry_alert_days INTEGER DEFAULT 30");
+    console.log('Migration: added items.expiry_alert_days');
+  }
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_items_expiry ON items(expiry_date)");
 }
 
 // ============================================================
@@ -237,6 +256,8 @@ function getItems({ categoryId, search, status, stockStatus, sort, page = 1, lim
     where.push('i.current_stock > 0 AND i.current_stock <= i.min_stock');
   } else if (stockStatus === 'normal') {
     where.push('i.current_stock > i.min_stock');
+  } else if (stockStatus === 'expiring') {
+    where.push("i.expiry_date IS NOT NULL AND i.expiry_date <= date('now', '+' || i.expiry_alert_days || ' days', 'localtime')");
   }
 
   const sortMap = {
@@ -283,10 +304,14 @@ function getItemById(id) {
 
 function createItem(data) {
   const stmt = db.prepare(`
-    INSERT INTO items (name, cat_code, unit, min_stock, current_stock, category_id, description)
-    VALUES (@name, @cat_code, @unit, @min_stock, @current_stock, @category_id, @description)
+    INSERT INTO items (name, cat_code, unit, min_stock, current_stock, category_id, description, expiry_date, expiry_alert_days)
+    VALUES (@name, @cat_code, @unit, @min_stock, @current_stock, @category_id, @description, @expiry_date, @expiry_alert_days)
   `);
-  const result = stmt.run(data);
+  const result = stmt.run({
+    ...data,
+    expiry_date: data.expiry_date || null,
+    expiry_alert_days: data.expiry_alert_days ?? 30,
+  });
   return getItemById(result.lastInsertRowid);
 }
 
@@ -296,10 +321,16 @@ function updateItem(id, data) {
     SET name = @name, cat_code = @cat_code, unit = @unit,
         min_stock = @min_stock, current_stock = @current_stock,
         category_id = @category_id, description = @description,
+        expiry_date = @expiry_date, expiry_alert_days = @expiry_alert_days,
         updated_at = datetime('now','localtime')
     WHERE id = @id
   `);
-  stmt.run({ id, ...data });
+  stmt.run({
+    id,
+    ...data,
+    expiry_date: data.expiry_date || null,
+    expiry_alert_days: data.expiry_alert_days ?? 30,
+  });
   return getItemById(id);
 }
 
@@ -440,6 +471,18 @@ function getLowStockItems() {
     LEFT JOIN categories c ON i.category_id = c.id
     WHERE i.current_stock <= i.min_stock AND i.status = 'active'
     ORDER BY (i.current_stock * 1.0 / MAX(i.min_stock, 1)) ASC
+  `).all();
+}
+
+function getExpiringItems() {
+  return db.prepare(`
+    SELECT i.*, c.name as category_name, c.color as category_color
+    FROM items i
+    LEFT JOIN categories c ON i.category_id = c.id
+    WHERE i.expiry_date IS NOT NULL
+      AND i.status = 'active'
+      AND i.expiry_date <= date('now', '+' || i.expiry_alert_days || ' days', 'localtime')
+    ORDER BY i.expiry_date ASC
   `).all();
 }
 
@@ -686,6 +729,8 @@ function confirmReceived(id, userId, newItemData, receiverUserId) {
         current_stock: 0,
         category_id: newItemData.category_id,
         description: newItemData.description || '',
+        expiry_date: newItemData.expiry_date || null,
+        expiry_alert_days: newItemData.expiry_alert_days || 30,
       });
       // addStock เพื่อบันทึกประวัติการรับเข้า
       addStock({
@@ -762,6 +807,7 @@ module.exports = {
   getTransactions,
   // Reports
   getLowStockItems,
+  getExpiringItems,
   getMonthlySummary,
   getDashboardStats,
   // Users / Auth
