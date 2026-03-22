@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 import type { Category, Item } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 // ============================================================
 // Props
@@ -16,6 +17,7 @@ interface ItemFormProps {
 // ============================================================
 const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
   const isEdit = !!editItem;
+  const { user } = useAuth();
 
   // Categories
   const [categories, setCategories] = useState<Category[]>([]);
@@ -40,7 +42,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
   const commonUnits = ['ขวด', 'กก.', 'ชิ้น', 'แพ็ค', 'กล่อง', 'ม้วน', 'อัน', 'แผ่น', 'ลิตร', 'ml'];
 
   // ============================================================
-  // Load categories
+  // Load categories & staff
   // ============================================================
   const fetchCategories = useCallback(async () => {
     try {
@@ -101,7 +103,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
     setLoading(true);
     setError(null);
 
-    const data = {
+    const data: Record<string, any> = {
       name: name.trim(),
       cat_code: catCode.trim(),
       category_id: categoryId,
@@ -110,6 +112,11 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
       min_stock: minStock,
       description: [size.trim(), grade.trim(), brand.trim()].join('|'),
     };
+
+    // ส่ง user_id เพื่อบันทึกประวัติการเคลื่อนไหว
+    if (user) {
+      data.user_id = user.id;
+    }
 
     try {
       if (isEdit && editItem) {
@@ -171,7 +178,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
         </div>
 
         {/* Form Card */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200">
           {/* Card Header */}
           <div className="px-8 py-5 border-b border-slate-200 bg-slate-50/50 flex items-center gap-3">
             <span className="material-symbols-outlined text-[#14b84b]">edit_note</span>
@@ -364,6 +371,25 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
                   </div>
                 </div>
 
+              </div>
+            </div>
+
+            {/* ผู้ดำเนินการ — ใช้ user ที่ login อยู่ */}
+            <div className="border-t border-slate-100 pt-6">
+              <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg text-[#14b84b]">person</span>
+                ผู้ดำเนินการ
+              </h4>
+              <div className="max-w-md">
+                <div className="w-full border border-slate-200 rounded-lg px-4 py-2.5 bg-slate-50 flex items-center gap-2">
+                  <div className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[#14b84b] text-sm">person</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-900">{user?.display_name}</span>
+                    {user?.department && <span className="text-xs text-slate-400 ml-2">({user.department})</span>}
+                  </div>
+                </div>
               </div>
             </div>
 

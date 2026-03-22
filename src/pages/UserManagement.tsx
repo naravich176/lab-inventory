@@ -38,6 +38,9 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ editUser, onSave, onClose
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<string>('staff');
+  const [position, setPosition] = useState('');
+  const [department, setDepartment] = useState('');
+  const [phone, setPhone] = useState('');
   const [status, setStatus] = useState<string>('active');
 
   const [loading, setLoading] = useState(false);
@@ -47,6 +50,9 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ editUser, onSave, onClose
     if (editUser) {
       setDisplayName(editUser.display_name);
       setRole(editUser.role);
+      setPosition(editUser.position || '');
+      setDepartment(editUser.department || '');
+      setPhone(editUser.phone || '');
       setStatus(editUser.status);
     }
   }, [editUser]);
@@ -62,6 +68,9 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ editUser, onSave, onClose
           display_name: displayName.trim(),
           role,
           status,
+          position: position.trim(),
+          department: department.trim(),
+          phone: phone.trim(),
         });
       } else {
         if (!username.trim() || !password || !displayName.trim()) {
@@ -79,6 +88,9 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ editUser, onSave, onClose
           password,
           display_name: displayName.trim(),
           role,
+          position: position.trim(),
+          department: department.trim(),
+          phone: phone.trim(),
         });
       }
       onSave();
@@ -164,6 +176,39 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ editUser, onSave, onClose
               <option value="procurement">เจ้าหน้าที่พัสดุ</option>
               <option value="admin">ผู้ดูแลระบบ</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">ตำแหน่ง</label>
+            <input
+              type="text"
+              value={position}
+              onChange={e => setPosition(e.target.value)}
+              placeholder="เช่น นักวิทยาศาสตร์, ผู้ช่วยวิจัย"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">แผนก/หน่วยงาน</label>
+            <input
+              type="text"
+              value={department}
+              onChange={e => setDepartment(e.target.value)}
+              placeholder="เช่น ห้องปฏิบัติการเคมี"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">เบอร์โทร</label>
+            <input
+              type="text"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="เช่น 081-234-5678"
+              className={inputClass}
+            />
           </div>
 
           {isEdit && (
@@ -469,9 +514,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNavigateHome }) => {
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-16">ลำดับ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">ชื่อแสดง</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">Username</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">ตำแหน่ง/แผนก</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">บทบาท</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">สถานะ</th>
-                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">วันที่สร้าง</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-24"></th>
                 </tr>
               </thead>
@@ -479,14 +524,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNavigateHome }) => {
                 {loading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <tr key={`sk-${i}`}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 8 }).map((_, j) => (
                         <td key={j} className="px-5 py-4"><div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: j === 1 ? '60%' : '40%' }}></div></td>
                       ))}
                     </tr>
                   ))
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-16 text-center">
+                    <td colSpan={8} className="px-5 py-16 text-center">
                       <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">group_off</span>
                       <p className="text-slate-400 text-sm">ยังไม่มีผู้ใช้ในระบบ</p>
                     </td>
@@ -507,6 +552,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNavigateHome }) => {
                       </td>
                       <td className="px-5 py-3.5 text-sm text-slate-500">@{u.username}</td>
                       <td className="px-5 py-3.5">
+                        <div>
+                          {u.position && <p className="text-sm text-slate-900">{u.position}</p>}
+                          {u.department && <p className="text-xs text-slate-400">{u.department}</p>}
+                          {!u.position && !u.department && <span className="text-xs text-slate-300">-</span>}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleColors[u.role] || 'bg-slate-100 text-slate-800'}`}>
                           {roleLabels[u.role] || u.role}
                         </span>
@@ -516,7 +568,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNavigateHome }) => {
                           {u.status === 'active' ? 'ใช้งาน' : 'ระงับ'}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-500">{formatDate(u.created_at)}</td>
                       <td className="px-5 py-3.5">
                         <div className="relative flex items-center justify-end gap-1" ref={openMenuId === u.id ? menuRef : undefined}>
                           <button

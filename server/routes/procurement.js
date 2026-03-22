@@ -100,9 +100,9 @@ router.put('/:id/status', requireProcurementOrAdmin, (req, res, next) => {
 router.put('/:id/receive', requireStaffOrAdmin, (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const { new_item } = req.body; // optional: สำหรับวัสดุใหม่
+    const { new_item, receiver_user_id } = req.body;
 
-    const result = db.confirmReceived(id, req.user.id, new_item || null);
+    const result = db.confirmReceived(id, req.user.id, new_item || null, receiver_user_id ? Number(receiver_user_id) : null);
     res.json({ success: true, data: result });
   } catch (err) {
     if (err.message.includes('ไม่พบ') || err.message.includes('ยืนยันรับได้เฉพาะ') || err.message.includes('วัสดุใหม่ต้อง') || err.message.includes('UNIQUE')) {

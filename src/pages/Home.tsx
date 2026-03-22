@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import type { Category, Item, Staff, ItemFilters } from '../api/client';
+import type { Category, Item, ItemFilters } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import './Home.css'; // แยก CSS สำหรับ Home page
 
@@ -57,48 +57,26 @@ function formatDate(dateStr: string): string {
 // ============================================================
 interface WithdrawModalProps {
   item: Item;
-  staffList: Staff[];
   onClose: () => void;
-  onSubmit: (data: { item_id: number; staff_id: number; quantity: number; note: string }) => Promise<void>;
+  onSubmit: (data: { item_id: number; user_id: number; quantity: number; note: string }) => Promise<void>;
   loading: boolean;
   error: string | null;
 }
 
-const WithdrawModal: React.FC<WithdrawModalProps> = ({ item, staffList, onClose, onSubmit, loading, error }) => {
-  const [staffId, setStaffId] = useState<number>(0);
+const WithdrawModal: React.FC<WithdrawModalProps> = ({ item, onClose, onSubmit, loading, error }) => {
+  const { user } = useAuth();
   const [quantity, setQuantity] = useState<number>(1);
   const [note, setNote] = useState('');
-  const [staffSearch, setStaffSearch] = useState('');
-  const [showStaffDropdown, setShowStaffDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const status = getItemStatus(item);
   const maxQty = item.current_stock;
 
-  const selectedStaff = staffList.find(s => s.id === staffId);
-
-  const filteredStaff = staffList.filter(s =>
-    s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
-    s.department.toLowerCase().includes(staffSearch.toLowerCase())
-  );
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowStaffDropdown(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
   const handleSubmit = async () => {
-    if (!staffId || quantity < 1 || quantity > maxQty) return;
-    await onSubmit({ item_id: item.id, staff_id: staffId, quantity, note });
+    if (!user || quantity < 1 || quantity > maxQty) return;
+    await onSubmit({ item_id: item.id, user_id: user.id, quantity, note });
   };
 
-  const canSubmit = staffId > 0 && quantity >= 1 && quantity <= maxQty && !loading;
+  const canSubmit = !!user && quantity >= 1 && quantity <= maxQty && !loading;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -142,70 +120,18 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ item, staffList, onClose,
 
         {/* Form */}
         <div className="px-6 py-4 space-y-4">
-          {/* Staff Select */}
-          <div ref={dropdownRef} className="relative">
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              เจ้าหน้าที่ผู้เบิก <span className="text-red-500">*</span>
-            </label>
-            <div
-              className="w-full border border-slate-200 rounded-lg cursor-pointer hover:border-[#14b84b] transition-colors"
-              onClick={() => setShowStaffDropdown(!showStaffDropdown)}
-            >
-              {selectedStaff ? (
-                <div className="px-4 py-2.5 flex items-center justify-between">
-                  <div>
-                    <span className="font-medium text-slate-900">{selectedStaff.name}</span>
-                    {selectedStaff.department && (
-                      <span className="text-xs text-slate-400 ml-2">({selectedStaff.department})</span>
-                    )}
-                  </div>
-                  <span className="material-symbols-outlined text-slate-400 text-lg">expand_more</span>
-                </div>
-              ) : (
-                <div className="px-4 py-2.5 flex items-center justify-between text-slate-400">
-                  <span className="text-sm">เลือกเจ้าหน้าที่...</span>
-                  <span className="material-symbols-outlined text-lg">expand_more</span>
-                </div>
-              )}
-            </div>
-
-            {/* Dropdown */}
-            {showStaffDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 max-h-48 overflow-hidden">
-                <div className="p-2 border-b border-slate-100">
-                  <input
-                    type="text"
-                    placeholder="ค้นหาเจ้าหน้าที่..."
-                    value={staffSearch}
-                    onChange={e => setStaffSearch(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white text-slate-400 text-sm border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#14b84b]"
-                    onClick={e => e.stopPropagation()}
-                    autoFocus
-                  />
-                </div>
-                <div className="overflow-y-auto max-h-36">
-                  {filteredStaff.length === 0 ? (
-                    <p className="px-4 py-3 text-sm text-slate-400 text-center">ไม่พบเจ้าหน้าที่</p>
-                  ) : (
-                    filteredStaff.map(s => (
-                      <button
-                        key={s.id}
-                        className={`w-full px-4 py-2.5 text-left hover:bg-green-50 transition-colors text-sm ${staffId === s.id ? 'bg-green-50 text-[#14b84b]' : 'text-slate-700'}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setStaffId(s.id);
-                          setShowStaffDropdown(false);
-                          setStaffSearch('');
-                        }}
-                      >
-                        <span className="font-medium">{s.name}</span>
-                        {s.department && <span className="text-xs text-slate-400 ml-2">({s.department})</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
+          {/* ผู้เบิก — แสดง user ที่ login อยู่ */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">ผู้เบิก</label>
+            <div className="w-full border border-slate-200 rounded-lg px-4 py-2.5 bg-slate-50 flex items-center gap-2">
+              <div className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="material-symbols-outlined text-[#14b84b] text-sm">person</span>
               </div>
-            )}
+              <div>
+                <span className="font-medium text-slate-900">{user?.display_name}</span>
+                {user?.department && <span className="text-xs text-slate-400 ml-2">({user.department})</span>}
+              </div>
+            </div>
           </div>
 
           {/* Quantity */}
@@ -230,7 +156,7 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ item, staffList, onClose,
                   const val = parseInt(e.target.value) || 1;
                   setQuantity(Math.min(maxQty, Math.max(1, val)));
                 }}
-                className="w-24 text-center bg-white border border-slate-200 rounded-lg py-2 text-slate-400 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b]"
+                className="w-24 text-center bg-white border border-slate-200 rounded-lg py-2 text-slate-900 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b]"
               />
               <button
                 className="w-10 h-10 flex items-center justify-center border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 transition-colors"
@@ -251,7 +177,7 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ item, staffList, onClose,
               onChange={e => setNote(e.target.value)}
               placeholder="ระบุหมายเหตุ (ไม่บังคับ)..."
               rows={2}
-              className="w-full border bg-white border-slate-200 rounded-lg px-4 py-2.5 text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] resize-none"
+              className="w-full border bg-white border-slate-200 rounded-lg px-4 py-2.5 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] resize-none"
             />
           </div>
 
@@ -292,6 +218,184 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ item, staffList, onClose,
               </>
             )}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
+// History Modal Component
+// ============================================================
+interface HistoryModalProps {
+  item: Item;
+  onClose: () => void;
+}
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleString('th-TH', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+const HistoryModal: React.FC<HistoryModalProps> = ({ item, onClose }) => {
+  const [transactions, setTransactions] = useState<import('../api/client').Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [total, setTotal] = useState(0);
+  const limit = 10;
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = async () => {
+      setLoading(true);
+      try {
+        const data = await api.getTransactions({ item_id: item.id, page, limit });
+        if (!cancelled) {
+          setTransactions(data.transactions);
+          setTotalPages(data.totalPages);
+          setTotal(data.total);
+        }
+      } catch (err) {
+        console.error('Fetch history error:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetch();
+    return () => { cancelled = true; };
+  }, [item.id, page]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-6 py-5 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-2xl">history</span>
+              <div>
+                <h3 className="text-lg font-bold">ประวัติการเคลื่อนไหว</h3>
+                <p className="text-sm text-slate-300 mt-0.5">{item.name} ({item.cat_code})</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="max-h-[60vh] overflow-y-auto">
+          {loading ? (
+            <div className="px-6 py-8 space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <div className="h-8 w-8 bg-slate-200 rounded-full animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-3/4 bg-slate-200 rounded animate-pulse" />
+                    <div className="h-3 w-1/2 bg-slate-200 rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : transactions.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">inbox</span>
+              <p className="text-slate-400 text-sm">ยังไม่มีประวัติการเคลื่อนไหว</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {transactions.map(txn => {
+                const isWithdraw = txn.type === 'withdraw';
+                return (
+                  <div key={txn.id} className="px-6 py-4 flex items-start gap-4 hover:bg-slate-50/50 transition-colors">
+                    {/* Icon */}
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      isWithdraw ? 'bg-red-100' : 'bg-blue-100'
+                    }`}>
+                      <span className={`material-symbols-outlined text-lg ${
+                        isWithdraw ? 'text-red-600' : 'text-blue-600'
+                      }`}>
+                        {isWithdraw ? 'outbox' : 'inbox'}
+                      </span>
+                    </div>
+
+                    {/* Detail */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                          isWithdraw ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {isWithdraw ? 'เบิกใช้' : 'รับเข้า'}
+                        </span>
+                        <span className="font-bold text-slate-900 text-sm">
+                          {isWithdraw ? '-' : '+'}{txn.quantity} {txn.item_unit || item.unit}
+                        </span>
+                      </div>
+                      {/* User name */}
+                      {txn.user_name && (
+                        <p className="text-sm text-slate-600 mt-1">
+                          <span className="material-symbols-outlined text-xs align-middle mr-1 text-slate-400">person</span>
+                          {txn.user_name}
+                          {txn.user_department && <span className="text-slate-400 ml-1">({txn.user_department})</span>}
+                        </p>
+                      )}
+                      {/* Note */}
+                      {txn.note && (
+                        <p className="text-xs text-slate-400 mt-1 truncate">
+                          <span className="material-symbols-outlined text-xs align-middle mr-1">notes</span>
+                          {txn.note}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Date */}
+                    <span className="text-xs text-slate-400 flex-shrink-0 whitespace-nowrap">
+                      {formatDateTime(txn.date)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer / Pagination */}
+        <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+          <span className="text-xs text-slate-500">
+            {total > 0 ? `ทั้งหมด ${total} รายการ` : ''}
+          </span>
+          {totalPages > 1 && (
+            <div className="flex gap-1">
+              <button
+                className="p-1.5 border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-50 text-xs"
+                disabled={page <= 1}
+                onClick={() => setPage(p => p - 1)}
+              >
+                <span className="material-symbols-outlined text-sm">chevron_left</span>
+              </button>
+              <span className="px-3 py-1.5 text-xs text-slate-600 font-medium">
+                {page} / {totalPages}
+              </span>
+              <button
+                className="p-1.5 border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-50 text-xs"
+                disabled={page >= totalPages}
+                onClick={() => setPage(p => p + 1)}
+              >
+                <span className="material-symbols-outlined text-sm">chevron_right</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -341,7 +445,6 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
   // State — data
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [staffList, setStaffList] = useState<Staff[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -352,10 +455,19 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
   const [loading, setLoading] = useState(true);
   const limit = 20;
 
+  // State — Filters
+  const [showFilter, setShowFilter] = useState(false);
+  const [stockStatus, setStockStatus] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('');
+  const filterRef = useRef<HTMLDivElement>(null);
+
   // State — Modal
   const [withdrawItem, setWithdrawItem] = useState<Item | null>(null);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
+  // State — History Modal
+  const [historyItem, setHistoryItem] = useState<Item | null>(null);
 
   // State — Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -402,6 +514,8 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
         categoryId: activeCategory,
         search: debouncedSearch || undefined,
         status: 'active',
+        stockStatus: stockStatus || undefined,
+        sort: sortBy || undefined,
         page,
         limit,
       };
@@ -414,27 +528,24 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, debouncedSearch, page]);
+  }, [activeCategory, debouncedSearch, stockStatus, sortBy, page]);
 
-  // ============================================================
-  // Fetch Staff (สำหรับ Modal)
-  // ============================================================
-  const fetchStaff = useCallback(async () => {
-    try {
-      const data = await api.getStaff({ status: 'active' });
-      setStaffList(data);
-    } catch (err) {
-      console.error('Fetch staff error:', err);
-    }
-  }, []);
 
   // ============================================================
   // Effects
   // ============================================================
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setShowFilter(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   useEffect(() => {
     fetchCategories();
-    fetchStaff();
-  }, [fetchCategories, fetchStaff]);
+  }, [fetchCategories]);
 
   useEffect(() => {
     fetchItems();
@@ -448,14 +559,14 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
   // ============================================================
   // Handle Withdraw
   // ============================================================
-  const handleWithdraw = async (data: { item_id: number; staff_id: number; quantity: number; note: string }) => {
+  const handleWithdraw = async (data: { item_id: number; user_id: number; quantity: number; note: string }) => {
     setWithdrawLoading(true);
     setWithdrawError(null);
 
     try {
       const result = await api.withdrawItem({
         item_id: data.item_id,
-        staff_id: data.staff_id,
+        user_id: data.user_id,
         quantity: data.quantity,
         note: data.note,
       });
@@ -500,11 +611,18 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
       {/* Toast */}
       {toast && <SuccessToast message={toast} onClose={() => setToast(null)} />}
 
+      {/* History Modal */}
+      {historyItem && (
+        <HistoryModal
+          item={historyItem}
+          onClose={() => setHistoryItem(null)}
+        />
+      )}
+
       {/* Withdraw Modal */}
       {withdrawItem && (
         <WithdrawModal
           item={withdrawItem}
-          staffList={staffList}
           onClose={() => {
             setWithdrawItem(null);
             setWithdrawError(null);
@@ -543,10 +661,10 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
           </aside>
 
           {/* Table */}
-          <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex-1">
 
-            {/* Table Header */}
-            <div className="p-6 border-b border-slate-200 flex justify-between items-center gap-4">
+            {/* Table Header — อยู่นอก overflow-hidden เพื่อให้ filter dropdown แสดงได้ */}
+            <div className="bg-white rounded-t-xl border border-slate-200 p-6 flex justify-between items-center gap-4">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
                   รายการวัสดุคงคลัง: {activeCat?.name || '—'}
@@ -564,13 +682,95 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                     className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] transition-all w-64"
                   />
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm font-medium hover:bg-slate-50 transition-colors">
-                  <span className="material-symbols-outlined text-lg">filter_list</span> กรอง
-                </button>
+                <div ref={filterRef} className="relative">
+                  <button
+                    onClick={() => setShowFilter(v => !v)}
+                    className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                      stockStatus || sortBy
+                        ? 'bg-[#14b84b] border-[#14b84b] text-white'
+                        : 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-lg">filter_list</span>
+                    กรอง
+                    {(stockStatus || sortBy) && (
+                      <span className="w-5 h-5 bg-white text-[#14b84b] rounded-full text-xs font-bold flex items-center justify-center">
+                        {(stockStatus ? 1 : 0) + (sortBy ? 1 : 0)}
+                      </span>
+                    )}
+                  </button>
+
+                  {showFilter && (
+                    <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-20 animate-in">
+                      <div className="p-4 border-b border-slate-100">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">สถานะ Stock</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: '', label: 'ทั้งหมด' },
+                            { value: 'normal', label: 'ปกติ' },
+                            { value: 'low', label: 'ใกล้หมด' },
+                            { value: 'out', label: 'หมด' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => { setStockStatus(opt.value); setPage(1); }}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                stockStatus === opt.value
+                                  ? 'bg-[#14b84b] text-white shadow-sm'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="p-4 border-b border-slate-100">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">เรียงลำดับ</p>
+                        <div className="space-y-1">
+                          {[
+                            { value: '', label: 'ค่าเริ่มต้น', icon: 'sort' },
+                            { value: 'name_asc', label: 'ชื่อ A → Z', icon: 'sort_by_alpha' },
+                            { value: 'stock_asc', label: 'คงเหลือ น้อย → มาก', icon: 'arrow_upward' },
+                            { value: 'stock_desc', label: 'คงเหลือ มาก → น้อย', icon: 'arrow_downward' },
+                            { value: 'updated_desc', label: 'แก้ไขล่าสุด', icon: 'schedule' },
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => { setSortBy(opt.value); setPage(1); }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left ${
+                                sortBy === opt.value
+                                  ? 'bg-green-50 text-[#14b84b] font-medium'
+                                  : 'text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-lg">{opt.icon}</span>
+                              {opt.label}
+                              {sortBy === opt.value && <span className="material-symbols-outlined text-sm ml-auto">check</span>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {(stockStatus || sortBy) && (
+                        <div className="p-3">
+                          <button
+                            onClick={() => { setStockStatus(''); setSortBy(''); setPage(1); }}
+                            className="w-full py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            ล้างตัวกรองทั้งหมด
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Table Content */}
+            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
@@ -647,7 +847,11 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                                   <span className="material-symbols-outlined text-sm">outbox</span> เบิกใช้
                                 </button>
                               )}
-                              <button className="p-1 text-slate-400 hover:text-[#14b84b] transition-colors">
+                              <button
+                                onClick={() => setHistoryItem(item)}
+                                className="p-1 text-slate-400 hover:text-[#14b84b] transition-colors"
+                                title="ดูประวัติ"
+                              >
                                 <span className="material-symbols-outlined">more_vert</span>
                               </button>
                             </div>
@@ -701,6 +905,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
               )}
             </div>
 
+            </div>{/* end overflow-hidden wrapper */}
           </div>
         </div>
       </main>

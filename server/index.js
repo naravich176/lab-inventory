@@ -13,7 +13,6 @@ const errorHandler = require('./middleware/errorHandler');
 const authRoutes = require('./routes/auth');
 const categoryRoutes = require('./routes/categories');
 const itemRoutes = require('./routes/items');
-const staffRoutes = require('./routes/staff');
 const transactionRoutes = require('./routes/transactions');
 const reportRoutes = require('./routes/reports');
 const userRoutes = require('./routes/users');
@@ -63,7 +62,6 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/items', itemRoutes);
-app.use('/api/staff', staffRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
@@ -101,7 +99,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('║   GET    /api/auth/me                        ║');
   console.log('║   GET    /api/categories                     ║');
   console.log('║   GET    /api/items                          ║');
-  console.log('║   GET    /api/staff                          ║');
+  console.log('║   GET    /api/users                          ║');
   console.log('║   GET    /api/transactions                   ║');
   console.log('║   GET    /api/reports/dashboard               ║');
   console.log('║   GET    /api/health                         ║');

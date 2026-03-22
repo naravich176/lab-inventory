@@ -46,21 +46,10 @@ export interface PaginatedItems {
   totalPages: number;
 }
 
-export interface Staff {
-  id: number;
-  name: string;
-  position: string;
-  department: string;
-  phone: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface Transaction {
   id: number;
   item_id: number;
-  staff_id: number;
+  user_id: number;
   quantity: number;
   type: 'withdraw' | 'add';
   note: string;
@@ -68,8 +57,8 @@ export interface Transaction {
   created_at: string;
   item_name?: string;
   item_unit?: string;
-  staff_name?: string;
-  staff_department?: string;
+  user_name?: string;
+  user_department?: string;
 }
 
 export interface PaginatedTransactions {
@@ -106,6 +95,9 @@ export interface User {
   username: string;
   display_name: string;
   role: 'admin' | 'staff' | 'procurement';
+  position: string;
+  department: string;
+  phone: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -120,18 +112,20 @@ export interface ItemFilters {
   categoryId?: number;
   search?: string;
   status?: string;
+  stockStatus?: string;
+  sort?: string;
   page?: number;
   limit?: number;
 }
 
-export interface StaffFilters {
+export interface UserFilters {
   search?: string;
   status?: string;
 }
 
 export interface TransactionFilters {
   item_id?: number;
-  staff_id?: number;
+  user_id?: number;
   type?: string;
   startDate?: string;
   endDate?: string;
@@ -152,6 +146,9 @@ export interface ProcurementRequest {
   note: string;
   received_by: number | null;
   received_by_name: string | null;
+  received_by_user: number | null;
+  received_by_user_name: string | null;
+  received_by_user_department: string | null;
   received_at: string | null;
   created_at: string;
   updated_at: string;
@@ -378,40 +375,12 @@ class ApiClient {
   }
 
   // ============================================================
-  // Staff
-  // ============================================================
-
-  async getStaff(filters?: StaffFilters): Promise<Staff[]> {
-    const query = this.buildQuery(filters || {});
-    return this.request<Staff[]>('GET', `/api/staff${query}`);
-  }
-
-  async getStaffById(id: number): Promise<Staff> {
-    return this.request<Staff>('GET', `/api/staff/${id}`);
-  }
-
-  async createStaff(data: Partial<Staff>): Promise<Staff> {
-    return this.request<Staff>('POST', '/api/staff', data);
-  }
-
-  async updateStaff(id: number, data: Partial<Staff>): Promise<Staff> {
-    return this.request<Staff>('PUT', `/api/staff/${id}`, data);
-  }
-
-  async deleteStaff(id: number): Promise<{ deleted?: boolean; softDeleted?: boolean }> {
-    return this.request<{ deleted?: boolean; softDeleted?: boolean }>(
-      'DELETE',
-      `/api/staff/${id}`
-    );
-  }
-
-  // ============================================================
   // Transactions
   // ============================================================
 
   async withdrawItem(data: {
     item_id: number;
-    staff_id: number;
+    user_id: number;
     quantity: number;
     note?: string;
   }): Promise<WithdrawResult> {
@@ -454,15 +423,16 @@ class ApiClient {
   // Users (admin)
   // ============================================================
 
-  async getUsers(): Promise<User[]> {
-    return this.request<User[]>('GET', '/api/users');
+  async getUsers(filters?: UserFilters): Promise<User[]> {
+    const query = this.buildQuery(filters || {});
+    return this.request<User[]>('GET', `/api/users${query}`);
   }
 
-  async createUser(data: { username: string; password: string; display_name: string; role: string }): Promise<User> {
+  async createUser(data: { username: string; password: string; display_name: string; role: string; position?: string; department?: string; phone?: string }): Promise<User> {
     return this.request<User>('POST', '/api/users', data);
   }
 
-  async updateUser(id: number, data: { display_name?: string; role?: string; status?: string }): Promise<User> {
+  async updateUser(id: number, data: { display_name?: string; role?: string; status?: string; position?: string; department?: string; phone?: string }): Promise<User> {
     return this.request<User>('PUT', `/api/users/${id}`, data);
   }
 
@@ -497,7 +467,7 @@ class ApiClient {
     return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/status`, data);
   }
 
-  async confirmProcurementReceived(id: number, newItem?: {
+  async confirmProcurementReceived(id: number, receiverUserId?: number, newItem?: {
     name: string;
     cat_code: string;
     unit: string;
@@ -507,6 +477,7 @@ class ApiClient {
   }): Promise<ProcurementRequest> {
     return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/receive`, {
       new_item: newItem || undefined,
+      receiver_user_id: receiverUserId || undefined,
     });
   }
 

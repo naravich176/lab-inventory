@@ -67,42 +67,33 @@ function createTables() {
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT
     );
 
-    -- เจ้าหน้าที่
-    CREATE TABLE IF NOT EXISTS staff (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      name        TEXT    NOT NULL,
-      position    TEXT    DEFAULT '',
-      department  TEXT    DEFAULT '',
-      phone       TEXT    DEFAULT '',
-      status      TEXT    DEFAULT 'active',
-      created_at  TEXT    DEFAULT (datetime('now','localtime')),
-      updated_at  TEXT    DEFAULT (datetime('now','localtime'))
-    );
-
-    -- บันทึกการเบิกใช้
-    CREATE TABLE IF NOT EXISTS transactions (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      item_id     INTEGER NOT NULL,
-      staff_id    INTEGER NOT NULL,
-      quantity    INTEGER NOT NULL,
-      type        TEXT    NOT NULL DEFAULT 'withdraw',
-      note        TEXT    DEFAULT '',
-      date        TEXT    DEFAULT (datetime('now','localtime')),
-      created_at  TEXT    DEFAULT (datetime('now','localtime')),
-      FOREIGN KEY (item_id)  REFERENCES items(id)  ON DELETE RESTRICT,
-      FOREIGN KEY (staff_id) REFERENCES staff(id)   ON DELETE RESTRICT
-    );
-
-    -- ผู้ใช้งานระบบ (ใหม่)
+    -- ผู้ใช้งานระบบ (รวม staff เข้ามาด้วย)
     CREATE TABLE IF NOT EXISTS users (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       username      TEXT    NOT NULL UNIQUE,
       password_hash TEXT    NOT NULL,
       display_name  TEXT    NOT NULL,
       role          TEXT    NOT NULL DEFAULT 'staff',
+      position      TEXT    DEFAULT '',
+      department    TEXT    DEFAULT '',
+      phone         TEXT    DEFAULT '',
       status        TEXT    DEFAULT 'active',
       created_at    TEXT    DEFAULT (datetime('now','localtime')),
       updated_at    TEXT    DEFAULT (datetime('now','localtime'))
+    );
+
+    -- บันทึกการเบิกใช้
+    CREATE TABLE IF NOT EXISTS transactions (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id     INTEGER NOT NULL,
+      user_id     INTEGER,
+      quantity    INTEGER NOT NULL,
+      type        TEXT    NOT NULL DEFAULT 'withdraw',
+      note        TEXT    DEFAULT '',
+      date        TEXT    DEFAULT (datetime('now','localtime')),
+      created_at  TEXT    DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (item_id) REFERENCES items(id)  ON DELETE RESTRICT,
+      FOREIGN KEY (user_id) REFERENCES users(id)  ON DELETE RESTRICT
     );
 
     -- คำขอจัดซื้อ
@@ -116,10 +107,15 @@ function createTables() {
       requested_by  INTEGER NOT NULL,
       status        TEXT    NOT NULL DEFAULT 'requested',
       note          TEXT    DEFAULT '',
+      received_by       INTEGER DEFAULT NULL,
+      received_at       TEXT DEFAULT NULL,
+      received_by_user  INTEGER DEFAULT NULL,
       created_at    TEXT    DEFAULT (datetime('now','localtime')),
       updated_at    TEXT    DEFAULT (datetime('now','localtime')),
       FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE SET NULL,
-      FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE RESTRICT
+      FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE RESTRICT,
+      FOREIGN KEY (received_by) REFERENCES users(id),
+      FOREIGN KEY (received_by_user) REFERENCES users(id)
     );
 
     -- Indexes สำหรับ query ที่ใช้บ่อย
@@ -128,22 +124,12 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_items_cat_code    ON items(cat_code);
     CREATE INDEX IF NOT EXISTS idx_transactions_item ON transactions(item_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-    CREATE INDEX IF NOT EXISTS idx_staff_status      ON staff(status);
     CREATE INDEX IF NOT EXISTS idx_users_username    ON users(username);
+    CREATE INDEX IF NOT EXISTS idx_users_status      ON users(status);
     CREATE INDEX IF NOT EXISTS idx_procurement_status ON procurement_requests(status);
     CREATE INDEX IF NOT EXISTS idx_procurement_requested_by ON procurement_requests(requested_by);
   `);
 
-  // Migration: เพิ่ม columns received_by, received_at ถ้ายังไม่มี
-  try {
-    db.prepare("SELECT received_by FROM procurement_requests LIMIT 1").get();
-  } catch {
-    db.exec(`
-      ALTER TABLE procurement_requests ADD COLUMN received_by INTEGER DEFAULT NULL;
-      ALTER TABLE procurement_requests ADD COLUMN received_at TEXT DEFAULT NULL;
-    `);
-    console.log('Migration: added received_by, received_at to procurement_requests');
-  }
 }
 
 // ============================================================
@@ -181,9 +167,9 @@ function seedDefaultAdmin() {
   // สร้าง admin account เริ่มต้น
   const hash = bcrypt.hashSync('admin123', SALT_ROUNDS);
   db.prepare(`
-    INSERT INTO users (username, password_hash, display_name, role)
-    VALUES (?, ?, ?, ?)
-  `).run('admin', hash, 'ผู้ดูแลระบบ', 'admin');
+    INSERT INTO users (username, password_hash, display_name, role, position, department)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run('admin', hash, 'ผู้ดูแลระบบ', 'admin', 'ผู้ดูแลระบบ', 'ฝ่ายบริหาร');
 
   console.log('Default admin seeded (username: admin, password: admin123)');
 }
@@ -229,7 +215,7 @@ function deleteCategory(id) {
 // ============================================================
 // 4) CRUD — Items
 // ============================================================
-function getItems({ categoryId, search, status, page = 1, limit = 20 } = {}) {
+function getItems({ categoryId, search, status, stockStatus, sort, page = 1, limit = 20 } = {}) {
   let where = ['1=1'];
   let params = {};
 
@@ -245,6 +231,21 @@ function getItems({ categoryId, search, status, page = 1, limit = 20 } = {}) {
     where.push('i.status = @status');
     params.status = status;
   }
+  if (stockStatus === 'out') {
+    where.push('i.current_stock <= 0');
+  } else if (stockStatus === 'low') {
+    where.push('i.current_stock > 0 AND i.current_stock <= i.min_stock');
+  } else if (stockStatus === 'normal') {
+    where.push('i.current_stock > i.min_stock');
+  }
+
+  const sortMap = {
+    'name_asc': 'i.name ASC',
+    'stock_asc': 'i.current_stock ASC',
+    'stock_desc': 'i.current_stock DESC',
+    'updated_desc': 'i.updated_at DESC',
+  };
+  const orderBy = sortMap[sort] || 'i.id DESC';
 
   const whereClause = where.join(' AND ');
   const offset = (page - 1) * limit;
@@ -258,7 +259,7 @@ function getItems({ categoryId, search, status, page = 1, limit = 20 } = {}) {
     FROM items i
     LEFT JOIN categories c ON i.category_id = c.id
     WHERE ${whereClause}
-    ORDER BY i.id DESC
+    ORDER BY ${orderBy}
     LIMIT @limit OFFSET @offset
   `).all({ ...params, limit, offset });
 
@@ -313,64 +314,9 @@ function deleteItem(id) {
 }
 
 // ============================================================
-// 5) CRUD — Staff
+// 5) Transactions — เบิกใช้วัสดุ
 // ============================================================
-function getStaff({ search, status } = {}) {
-  let where = ['1=1'];
-  let params = {};
-
-  if (search) {
-    where.push('(name LIKE @search OR department LIKE @search)');
-    params.search = `%${search}%`;
-  }
-  if (status) {
-    where.push('status = @status');
-    params.status = status;
-  }
-
-  return db.prepare(`
-    SELECT * FROM staff WHERE ${where.join(' AND ')} ORDER BY name ASC
-  `).all(params);
-}
-
-function getStaffById(id) {
-  return db.prepare('SELECT * FROM staff WHERE id = ?').get(id);
-}
-
-function createStaff(data) {
-  const stmt = db.prepare(`
-    INSERT INTO staff (name, position, department, phone)
-    VALUES (@name, @position, @department, @phone)
-  `);
-  const result = stmt.run(data);
-  return getStaffById(result.lastInsertRowid);
-}
-
-function updateStaff(id, data) {
-  const stmt = db.prepare(`
-    UPDATE staff
-    SET name = @name, position = @position, department = @department,
-        phone = @phone, updated_at = datetime('now','localtime')
-    WHERE id = @id
-  `);
-  stmt.run({ id, ...data });
-  return getStaffById(id);
-}
-
-function deleteStaff(id) {
-  const txnCount = db.prepare('SELECT COUNT(*) as cnt FROM transactions WHERE staff_id = ?').get(id);
-  if (txnCount.cnt > 0) {
-    db.prepare("UPDATE staff SET status = 'inactive', updated_at = datetime('now','localtime') WHERE id = ?").run(id);
-    return { softDeleted: true };
-  }
-  db.prepare('DELETE FROM staff WHERE id = ?').run(id);
-  return { deleted: true };
-}
-
-// ============================================================
-// 6) Transactions — เบิกใช้วัสดุ
-// ============================================================
-function withdrawItem({ item_id, staff_id, quantity, note = '' }) {
+function withdrawItem({ item_id, user_id, quantity, note = '' }) {
   const withdraw = db.transaction(() => {
     const item = db.prepare('SELECT * FROM items WHERE id = ?').get(item_id);
     if (!item) throw new Error('ไม่พบรายการวัสดุ');
@@ -378,14 +324,14 @@ function withdrawItem({ item_id, staff_id, quantity, note = '' }) {
       throw new Error(`สต็อกไม่เพียงพอ (เหลือ ${item.current_stock} ${item.unit})`);
     }
 
-    const staff = db.prepare('SELECT * FROM staff WHERE id = ?').get(staff_id);
-    if (!staff) throw new Error('ไม่พบเจ้าหน้าที่');
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(user_id);
+    if (!user) throw new Error('ไม่พบผู้ใช้');
 
     const txnStmt = db.prepare(`
-      INSERT INTO transactions (item_id, staff_id, quantity, type, note)
-      VALUES (@item_id, @staff_id, @quantity, 'withdraw', @note)
+      INSERT INTO transactions (item_id, user_id, quantity, type, note)
+      VALUES (@item_id, @user_id, @quantity, 'withdraw', @note)
     `);
-    const txnResult = txnStmt.run({ item_id, staff_id, quantity, note });
+    const txnResult = txnStmt.run({ item_id, user_id, quantity, note });
 
     db.prepare(`
       UPDATE items
@@ -396,10 +342,10 @@ function withdrawItem({ item_id, staff_id, quantity, note = '' }) {
 
     const updatedItem = getItemById(item_id);
     const transaction = db.prepare(`
-      SELECT t.*, i.name as item_name, s.name as staff_name
+      SELECT t.*, i.name as item_name, u.display_name as user_name, u.department as user_department
       FROM transactions t
       LEFT JOIN items i ON t.item_id = i.id
-      LEFT JOIN staff s ON t.staff_id = s.id
+      LEFT JOIN users u ON t.user_id = u.id
       WHERE t.id = ?
     `).get(txnResult.lastInsertRowid);
 
@@ -409,15 +355,15 @@ function withdrawItem({ item_id, staff_id, quantity, note = '' }) {
   return withdraw();
 }
 
-function addStock({ item_id, quantity, note = '' }) {
+function addStock({ item_id, quantity, note = '', user_id = null }) {
   const add = db.transaction(() => {
     const item = db.prepare('SELECT * FROM items WHERE id = ?').get(item_id);
     if (!item) throw new Error('ไม่พบรายการวัสดุ');
 
     db.prepare(`
-      INSERT INTO transactions (item_id, staff_id, quantity, type, note)
-      VALUES (@item_id, 0, @quantity, 'add', @note)
-    `).run({ item_id, quantity, note });
+      INSERT INTO transactions (item_id, user_id, quantity, type, note)
+      VALUES (@item_id, @user_id, @quantity, 'add', @note)
+    `).run({ item_id, user_id, quantity, note });
 
     db.prepare(`
       UPDATE items
@@ -432,7 +378,7 @@ function addStock({ item_id, quantity, note = '' }) {
   return add();
 }
 
-function getTransactions({ item_id, staff_id, type, startDate, endDate, page = 1, limit = 50 } = {}) {
+function getTransactions({ item_id, user_id, type, startDate, endDate, page = 1, limit = 50 } = {}) {
   let where = ['1=1'];
   let params = {};
 
@@ -440,9 +386,9 @@ function getTransactions({ item_id, staff_id, type, startDate, endDate, page = 1
     where.push('t.item_id = @item_id');
     params.item_id = item_id;
   }
-  if (staff_id) {
-    where.push('t.staff_id = @staff_id');
-    params.staff_id = staff_id;
+  if (user_id) {
+    where.push('t.user_id = @user_id');
+    params.user_id = user_id;
   }
   if (type) {
     where.push('t.type = @type');
@@ -466,10 +412,10 @@ function getTransactions({ item_id, staff_id, type, startDate, endDate, page = 1
 
   const transactions = db.prepare(`
     SELECT t.*, i.name as item_name, i.unit as item_unit,
-           s.name as staff_name, s.department as staff_department
+           u.display_name as user_name, u.department as user_department
     FROM transactions t
     LEFT JOIN items i ON t.item_id = i.id
-    LEFT JOIN staff s ON t.staff_id = s.id
+    LEFT JOIN users u ON t.user_id = u.id
     WHERE ${whereClause}
     ORDER BY t.date DESC
     LIMIT @limit OFFSET @offset
@@ -519,7 +465,7 @@ function getMonthlySummary(year, month) {
 function getDashboardStats() {
   const totalItems = db.prepare("SELECT COUNT(*) as cnt FROM items WHERE status = 'active'").get().cnt;
   const lowStockCount = db.prepare("SELECT COUNT(*) as cnt FROM items WHERE current_stock <= min_stock AND status = 'active'").get().cnt;
-  const totalStaff = db.prepare("SELECT COUNT(*) as cnt FROM staff WHERE status = 'active'").get().cnt;
+  const totalStaff = db.prepare("SELECT COUNT(*) as cnt FROM users WHERE status = 'active'").get().cnt;
   const todayTransactions = db.prepare(`
     SELECT COUNT(*) as cnt FROM transactions
     WHERE date(date) = date('now','localtime')
@@ -538,19 +484,31 @@ function getUserByUsername(username) {
 function getUserById(id) {
   // ไม่ส่ง password_hash กลับ
   return db.prepare(`
-    SELECT id, username, display_name, role, status, created_at, updated_at
+    SELECT id, username, display_name, role, position, department, phone, status, created_at, updated_at
     FROM users WHERE id = ?
   `).get(id);
 }
 
-function getUsers() {
+function getUsers({ search, status } = {}) {
+  let where = ['1=1'];
+  let params = {};
+
+  if (search) {
+    where.push('(display_name LIKE @search OR department LIKE @search OR username LIKE @search)');
+    params.search = `%${search}%`;
+  }
+  if (status) {
+    where.push('status = @status');
+    params.status = status;
+  }
+
   return db.prepare(`
-    SELECT id, username, display_name, role, status, created_at, updated_at
-    FROM users ORDER BY id ASC
-  `).all();
+    SELECT id, username, display_name, role, position, department, phone, status, created_at, updated_at
+    FROM users WHERE ${where.join(' AND ')} ORDER BY display_name ASC
+  `).all(params);
 }
 
-function createUser({ username, password, display_name, role = 'staff' }) {
+function createUser({ username, password, display_name, role = 'staff', position = '', department = '', phone = '' }) {
   const existing = getUserByUsername(username);
   if (existing) {
     throw new Error('ชื่อผู้ใช้นี้มีอยู่แล้ว');
@@ -558,14 +516,17 @@ function createUser({ username, password, display_name, role = 'staff' }) {
 
   const hash = bcrypt.hashSync(password, SALT_ROUNDS);
   const stmt = db.prepare(`
-    INSERT INTO users (username, password_hash, display_name, role)
-    VALUES (@username, @password_hash, @display_name, @role)
+    INSERT INTO users (username, password_hash, display_name, role, position, department, phone)
+    VALUES (@username, @password_hash, @display_name, @role, @position, @department, @phone)
   `);
   const result = stmt.run({
     username,
     password_hash: hash,
     display_name,
     role,
+    position,
+    department,
+    phone,
   });
   return getUserById(result.lastInsertRowid);
 }
@@ -577,6 +538,7 @@ function updateUser(id, data) {
   const stmt = db.prepare(`
     UPDATE users
     SET display_name = @display_name, role = @role, status = @status,
+        position = @position, department = @department, phone = @phone,
         updated_at = datetime('now','localtime')
     WHERE id = @id
   `);
@@ -585,6 +547,9 @@ function updateUser(id, data) {
     display_name: data.display_name ?? user.display_name,
     role: data.role ?? user.role,
     status: data.status ?? user.status,
+    position: data.position ?? user.position,
+    department: data.department ?? user.department,
+    phone: data.phone ?? user.phone,
   });
   return getUserById(id);
 }
@@ -644,10 +609,13 @@ function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } =
 
   const requests = db.prepare(`
     SELECT pr.*, u.display_name as requested_by_name,
-           u2.display_name as received_by_name
+           u2.display_name as received_by_name,
+           u3.display_name as received_by_user_name,
+           u3.department as received_by_user_department
     FROM procurement_requests pr
     LEFT JOIN users u ON pr.requested_by = u.id
     LEFT JOIN users u2 ON pr.received_by = u2.id
+    LEFT JOIN users u3 ON pr.received_by_user = u3.id
     WHERE ${whereClause}
     ORDER BY pr.id DESC
     LIMIT @limit OFFSET @offset
@@ -665,10 +633,13 @@ function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } =
 function getProcurementRequestById(id) {
   return db.prepare(`
     SELECT pr.*, u.display_name as requested_by_name,
-           u2.display_name as received_by_name
+           u2.display_name as received_by_name,
+           u3.display_name as received_by_user_name,
+           u3.department as received_by_user_department
     FROM procurement_requests pr
     LEFT JOIN users u ON pr.requested_by = u.id
     LEFT JOIN users u2 ON pr.received_by = u2.id
+    LEFT JOIN users u3 ON pr.received_by_user = u3.id
     WHERE pr.id = ?
   `).get(id);
 }
@@ -689,7 +660,7 @@ function updateProcurementStatus(id, { status, note }) {
   return getProcurementRequestById(id);
 }
 
-function confirmReceived(id, userId, newItemData) {
+function confirmReceived(id, userId, newItemData, receiverUserId) {
   const confirm = db.transaction(() => {
     const existing = getProcurementRequestById(id);
     if (!existing) throw new Error('ไม่พบคำขอจัดซื้อ');
@@ -703,6 +674,7 @@ function confirmReceived(id, userId, newItemData) {
         item_id: existing.item_id,
         quantity: existing.quantity,
         note: `รับพัสดุจากคำขอจัดซื้อ #${id}`,
+        user_id: receiverUserId || null,
       });
     } else if (newItemData) {
       // วัสดุใหม่ → สร้าง item แล้ว addStock
@@ -711,9 +683,16 @@ function confirmReceived(id, userId, newItemData) {
         cat_code: newItemData.cat_code,
         unit: newItemData.unit || existing.unit,
         min_stock: newItemData.min_stock || 0,
-        current_stock: existing.quantity,
+        current_stock: 0,
         category_id: newItemData.category_id,
         description: newItemData.description || '',
+      });
+      // addStock เพื่อบันทึกประวัติการรับเข้า
+      addStock({
+        item_id: newItem.id,
+        quantity: existing.quantity,
+        note: `รับพัสดุจากคำขอจัดซื้อ #${id} (วัสดุใหม่)`,
+        user_id: receiverUserId || null,
       });
       // อัพเดต item_id ใน procurement request
       db.prepare('UPDATE procurement_requests SET item_id = ? WHERE id = ?').run(newItem.id, id);
@@ -726,10 +705,11 @@ function confirmReceived(id, userId, newItemData) {
       UPDATE procurement_requests
       SET status = 'received',
           received_by = @userId,
+          received_by_user = @receiverUserId,
           received_at = datetime('now','localtime'),
           updated_at = datetime('now','localtime')
       WHERE id = @id
-    `).run({ id, userId });
+    `).run({ id, userId, receiverUserId: receiverUserId || null });
 
     return getProcurementRequestById(id);
   });
@@ -776,12 +756,6 @@ module.exports = {
   createItem,
   updateItem,
   deleteItem,
-  // Staff
-  getStaff,
-  getStaffById,
-  createStaff,
-  updateStaff,
-  deleteStaff,
   // Transactions
   withdrawItem,
   addStock,

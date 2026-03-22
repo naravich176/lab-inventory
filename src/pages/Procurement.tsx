@@ -404,41 +404,62 @@ interface ReceiveConfirmModalProps {
   loading: boolean;
 }
 
-const ReceiveConfirmModal: React.FC<ReceiveConfirmModalProps> = ({ request, onConfirm, onCancel, loading }) => (
-  <div className="fixed inset-0 z-[100] flex items-center justify-center">
-    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
-    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in">
-      <div className="p-6 text-center">
-        <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <span className="material-symbols-outlined text-[#14b84b] text-3xl">inventory</span>
+const ReceiveConfirmModal: React.FC<ReceiveConfirmModalProps> = ({ request, onConfirm, onCancel, loading }) => {
+  const { user } = useAuth();
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in">
+        <div className="p-6">
+          <div className="text-center mb-5">
+            <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="material-symbols-outlined text-[#14b84b] text-3xl">inventory</span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">ยืนยันรับพัสดุ</h3>
+            <p className="text-sm text-slate-500 mb-1">รับวัสดุและเพิ่มเข้าคลัง</p>
+            <p className="font-bold text-slate-900">"{request.item_name}"</p>
+            <p className="text-sm text-slate-500 mt-2">จำนวน <span className="font-bold text-[#14b84b]">{request.quantity} {request.unit}</span> จะถูกเพิ่มเข้า stock</p>
+          </div>
+
+          {/* ผู้รับพัสดุ — user ที่ login อยู่ */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">ผู้รับพัสดุ</label>
+            <div className="w-full border border-slate-200 rounded-lg px-4 py-2.5 bg-slate-50 flex items-center gap-2">
+              <div className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="material-symbols-outlined text-[#14b84b] text-sm">person</span>
+              </div>
+              <div>
+                <span className="font-medium text-slate-900">{user?.display_name}</span>
+                {user?.department && <span className="text-xs text-slate-400 ml-2">({user.department})</span>}
+              </div>
+            </div>
+          </div>
         </div>
-        <h3 className="text-lg font-bold text-slate-900 mb-2">ยืนยันรับพัสดุ</h3>
-        <p className="text-sm text-slate-500 mb-1">รับวัสดุและเพิ่มเข้าคลัง</p>
-        <p className="font-bold text-slate-900">"{request.item_name}"</p>
-        <p className="text-sm text-slate-500 mt-2">จำนวน <span className="font-bold text-[#14b84b]">{request.quantity} {request.unit}</span> จะถูกเพิ่มเข้า stock</p>
-      </div>
-      <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
-        <button onClick={onCancel} className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
-          ยกเลิก
-        </button>
-        <button
-          onClick={onConfirm}
-          disabled={loading}
-          className="px-6 py-2.5 bg-[#14b84b] text-white text-sm font-bold rounded-lg hover:bg-[#0ea53e] disabled:opacity-50 transition-colors flex items-center gap-2"
-        >
-          {loading ? (
-            <>
-              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-              กำลังบันทึก...
-            </>
-          ) : (
-            <><span className="material-symbols-outlined text-sm">check</span> ยืนยันรับพัสดุ</>
-          )}
-        </button>
+
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+          <button onClick={onCancel} className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+            ยกเลิก
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="px-6 py-2.5 bg-[#14b84b] text-white text-sm font-bold rounded-lg hover:bg-[#0ea53e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                กำลังบันทึก...
+              </>
+            ) : (
+              <><span className="material-symbols-outlined text-sm">check</span> ยืนยันรับพัสดุ</>
+            )}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ============================================================
 // Receive New Item Modal — วัสดุใหม่ที่ยังไม่มีในระบบ
@@ -450,6 +471,7 @@ interface ReceiveNewItemModalProps {
 }
 
 const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSave, onClose }) => {
+  const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState(request.item_name);
   const [catCode, setCatCode] = useState('');
@@ -462,14 +484,14 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchCats() {
+    async function fetchData() {
       try {
-        const data = await api.getCategories();
-        setCategories(data);
-        if (data.length > 0) setCategoryId(data[0].id);
+        const cats = await api.getCategories();
+        setCategories(cats);
+        if (cats.length > 0) setCategoryId(cats[0].id);
       } catch (err) { console.error(err); }
     }
-    fetchCats();
+    fetchData();
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -481,7 +503,7 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
     setLoading(true);
     setError(null);
     try {
-      await api.confirmProcurementReceived(request.id, {
+      await api.confirmProcurementReceived(request.id, user?.id, {
         name: name.trim(),
         cat_code: catCode.trim(),
         unit: unit.trim() || 'ชิ้น',
@@ -520,6 +542,20 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
             <p className="text-xs text-slate-400">จากคำขอจัดซื้อ #{String(request.id).padStart(3, '0')}</p>
             <p className="font-bold text-slate-900 mt-0.5">{request.item_name}</p>
             <p className="text-sm text-slate-500 mt-1">จำนวน <span className="font-bold text-[#14b84b]">{request.quantity} {request.unit}</span> จะถูกเพิ่มเป็น stock เริ่มต้น</p>
+          </div>
+
+          {/* ผู้รับพัสดุ — user ที่ login อยู่ */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">ผู้รับพัสดุ</label>
+            <div className="w-full border border-slate-200 rounded-lg px-4 py-2.5 bg-slate-50 flex items-center gap-2">
+              <div className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="material-symbols-outlined text-[#14b84b] text-sm">person</span>
+              </div>
+              <div>
+                <span className="font-medium text-slate-900">{user?.display_name}</span>
+                {user?.department && <span className="text-xs text-slate-400 ml-2">({user.department})</span>}
+              </div>
+            </div>
           </div>
 
           <div>
@@ -739,10 +775,10 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
   };
 
   const handleReceiveExisting = async () => {
-    if (!receivingRequest) return;
+    if (!receivingRequest || !user) return;
     setReceiveLoading(true);
     try {
-      await api.confirmProcurementReceived(receivingRequest.id);
+      await api.confirmProcurementReceived(receivingRequest.id, user.id);
       setToast({ message: 'ยืนยันรับพัสดุสำเร็จ — เพิ่ม stock แล้ว', type: 'success' });
       setReceivingRequest(null);
       fetchRequests();
@@ -871,6 +907,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 text-center">จำนวน</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">ผู้แจ้ง</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">สถานะ</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">ผู้รับพัสดุ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">วันที่</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">หมายเหตุ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-24"></th>
@@ -880,14 +917,14 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                 {loading ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <tr key={`sk-${i}`}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <td key={j} className="px-5 py-4"><div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: j === 1 ? '60%' : '40%' }}></div></td>
                       ))}
                     </tr>
                   ))
                 ) : requests.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-16 text-center">
+                    <td colSpan={9} className="px-5 py-16 text-center">
                       <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">shopping_cart</span>
                       <p className="text-slate-400 text-sm mb-4">ยังไม่มีคำขอจัดซื้อ</p>
                       {canCreate && (
@@ -916,6 +953,18 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[req.status] || 'bg-slate-100 text-slate-800'}`}>
                           {statusLabels[req.status] || req.status}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {req.received_by_user_name ? (
+                          <div>
+                            <span className="text-sm font-medium text-slate-900">{req.received_by_user_name}</span>
+                            {req.received_at && (
+                              <p className="text-xs text-slate-400 mt-0.5">{formatDate(req.received_at)}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-300">-</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-sm text-slate-500">{formatDate(req.created_at)}</td>
                       <td className="px-5 py-3.5 text-sm text-slate-500 max-w-[150px] truncate">{req.note || '-'}</td>

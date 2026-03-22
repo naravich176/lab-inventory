@@ -3,7 +3,6 @@ import { useAuth } from './hooks/useAuth';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import ItemManagement from './pages/ItemManagement';
-import StaffManagement from './pages/StaffManagement';
 import ReportSummary from './pages/ReportSummary';
 import PrintInventory from './pages/PrintInventory';
 import CategoryManagement from './pages/CategoryManagement';
@@ -14,7 +13,7 @@ import NotificationPanel from './components/NotificationPanel';
 // ============================================================
 // Simple page router ด้วย state
 // ============================================================
-type Page = 'home' | 'items' | 'staff' | 'report' | 'print' | 'categories' | 'users' | 'procurement';
+type Page = 'home' | 'items' | 'report' | 'print' | 'categories' | 'users' | 'procurement';
 
 const roleLabels: Record<string, string> = {
   admin: 'ผู้ดูแลระบบ',
@@ -31,7 +30,6 @@ const App: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const canManageItems = isStaff || isAdmin;
-  const canManageStaff = isAdmin;
   const canManageCategories = isStaff || isAdmin;
 
   // Close dropdowns on outside click
@@ -95,7 +93,6 @@ const App: React.FC = () => {
           <nav className="flex items-center gap-6">
             {navButton('home', 'หน้าหลัก')}
             {canManageItems && navButton('items', 'จัดการวัสดุอุปกรณ์')}
-            {canManageStaff && navButton('staff', 'จัดการรายชื่อเจ้าหน้าที่')}
             {navButton('procurement', 'จัดซื้อ')}
             {navButton('report', 'สรุปรายงาน')}
             {navButton('print', 'ปริ้นรายการ')}
@@ -193,10 +190,7 @@ const App: React.FC = () => {
       {currentPage === 'items' && (
         <ItemManagement onNavigateHome={() => setCurrentPage('home')} />
       )}
-      {currentPage === 'staff' && (
-        <StaffManagement onNavigateHome={() => setCurrentPage('home')} />
-      )}
-      {currentPage === 'report' && (
+{currentPage === 'report' && (
         <ReportSummary onNavigateHome={() => setCurrentPage('home')} />
       )}
       {currentPage === 'print' && (

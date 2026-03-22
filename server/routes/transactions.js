@@ -11,12 +11,12 @@ router.use(authenticateToken);
 // POST /api/transactions/withdraw — staff + admin
 router.post('/withdraw', requireStaffOrAdmin, (req, res, next) => {
   try {
-    const { item_id, staff_id, quantity, note = '' } = req.body;
+    const { item_id, user_id, quantity, note = '' } = req.body;
 
-    if (!item_id || !staff_id || !quantity) {
+    if (!item_id || !user_id || !quantity) {
       return res.status(400).json({
         success: false,
-        error: 'กรุณากรอก item_id, staff_id, quantity',
+        error: 'กรุณากรอก item_id, user_id, quantity',
       });
     }
 
@@ -29,7 +29,7 @@ router.post('/withdraw', requireStaffOrAdmin, (req, res, next) => {
 
     const result = db.withdrawItem({
       item_id: Number(item_id),
-      staff_id: Number(staff_id),
+      user_id: Number(user_id),
       quantity: Number(quantity),
       note,
     });
@@ -78,14 +78,14 @@ router.post('/add-stock', requireAdmin, (req, res, next) => {
   }
 });
 
-// GET /api/transactions?item_id=&staff_id=&type=&startDate=&endDate=&page=&limit=
+// GET /api/transactions?item_id=&user_id=&type=&startDate=&endDate=&page=&limit=
 router.get('/', (req, res, next) => {
   try {
-    const { item_id, staff_id, type, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const { item_id, user_id, type, startDate, endDate, page = 1, limit = 50 } = req.query;
 
     const result = db.getTransactions({
       item_id: item_id ? Number(item_id) : undefined,
-      staff_id: staff_id ? Number(staff_id) : undefined,
+      user_id: user_id ? Number(user_id) : undefined,
       type: type || undefined,
       startDate: startDate || undefined,
       endDate: endDate || undefined,
