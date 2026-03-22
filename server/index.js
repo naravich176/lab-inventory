@@ -18,6 +18,7 @@ const transactionRoutes = require('./routes/transactions');
 const reportRoutes = require('./routes/reports');
 const userRoutes = require('./routes/users');
 const procurementRoutes = require('./routes/procurement');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -67,6 +68,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/procurement', procurementRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler for API routes
 app.use('/api/*', (req, res) => {

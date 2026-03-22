@@ -1,35 +1,60 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import type { Item } from '../api/client';
+import type { Notification } from '../api/client';
 
 // ============================================================
-// Expiry helpers
-// ============================================================
-function getExpiryDaysLeft(item: Item): number | null {
-  if (!item.expiry_date) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const exp = new Date(item.expiry_date + 'T00:00:00');
-  return Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function formatExpiryDate(dateStr: string): string {
-  try {
-    return new Date(dateStr + 'T00:00:00').toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  } catch { return dateStr; }
-}
-
-// ============================================================
-// NotificationPanel
+// NotificationPanel — ใช้ตาราง notifications แทน low-stock / expiring queries
 // ============================================================
 interface NotificationPanelProps {
   onNavigateItems?: () => void;
 }
 
+const typeConfig: Record<string, { icon: string; bgColor: string; iconColor: string; sectionBg: string; sectionBorder: string; sectionText: string; label: string }> = {
+  out_of_stock: {
+    icon: 'error',
+    bgColor: 'bg-red-100',
+    iconColor: 'text-red-500',
+    sectionBg: 'bg-red-50',
+    sectionBorder: 'border-red-100',
+    sectionText: 'text-red-700',
+    label: 'หมดสต็อก',
+  },
+  low_stock: {
+    icon: 'inventory_2',
+    bgColor: 'bg-amber-100',
+    iconColor: 'text-amber-500',
+    sectionBg: 'bg-amber-50',
+    sectionBorder: 'border-amber-100',
+    sectionText: 'text-amber-700',
+    label: 'สต็อกใกล้หมด',
+  },
+  expired: {
+    icon: 'event_busy',
+    bgColor: 'bg-red-100',
+    iconColor: 'text-red-500',
+    sectionBg: 'bg-red-50',
+    sectionBorder: 'border-red-100',
+    sectionText: 'text-red-700',
+    label: 'หมดอายุแล้ว',
+  },
+  expiring: {
+    icon: 'schedule',
+    bgColor: 'bg-orange-100',
+    iconColor: 'text-orange-500',
+    sectionBg: 'bg-orange-50',
+    sectionBorder: 'border-orange-100',
+    sectionText: 'text-orange-700',
+    label: 'ใกล้หมดอายุ',
+  },
+};
+
+// ลำดับการแสดงผล sections
+const sectionOrder: string[] = ['expired', 'expiring', 'out_of_stock', 'low_stock'];
+
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }) => {
   const [open, setOpen] = useState(false);
-  const [lowStockItems, setLowStockItems] = useState<Item[]>([]);
-  const [expiringItems, setExpiringItems] = useState<Item[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -48,12 +73,14 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const [lowStock, expiring] = await Promise.all([
-        api.getLowStockItems(),
-        api.getExpiringItems(),
+      // Generate ก่อน แล้วค่อยดึงรายการ
+      await api.generateNotifications();
+      const [notifs, countData] = await Promise.all([
+        api.getNotifications(),
+        api.getUnreadCount(),
       ]);
-      setLowStockItems(lowStock);
-      setExpiringItems(expiring);
+      setNotifications(notifs);
+      setUnreadCount(countData.count);
     } catch (err) {
       console.error(err);
     } finally {
@@ -73,19 +100,46 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
     if (open) fetchNotifications();
   }, [open, fetchNotifications]);
 
-  const outOfStock = lowStockItems.filter(i => i.current_stock <= 0);
-  const almostOut = lowStockItems.filter(i => i.current_stock > 0);
+  // Mark single notification as read
+  const handleMarkAsRead = async (id: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await api.markNotificationAsRead(id);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-  const expiredItems = expiringItems.filter(i => {
-    const days = getExpiryDaysLeft(i);
-    return days !== null && days < 0;
-  });
-  const soonExpiring = expiringItems.filter(i => {
-    const days = getExpiryDaysLeft(i);
-    return days !== null && days >= 0;
-  });
+  // Mark all as read
+  const handleMarkAllAsRead = async () => {
+    try {
+      await api.markAllNotificationsAsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-  const totalAlerts = lowStockItems.length + expiringItems.length;
+  // Click notification → mark as read + navigate
+  const handleClickNotification = async (notif: Notification) => {
+    if (!notif.is_read) {
+      await handleMarkAsRead(notif.id);
+    }
+    setOpen(false);
+    if (onNavigateItems) onNavigateItems();
+  };
+
+  // Group notifications by type
+  const grouped = sectionOrder.reduce<Record<string, Notification[]>>((acc, type) => {
+    const items = notifications.filter(n => n.type === type);
+    if (items.length > 0) acc[type] = items;
+    return acc;
+  }, {});
+
+  const totalAlerts = notifications.length;
 
   return (
     <div className="relative" ref={panelRef}>
@@ -95,9 +149,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
         className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative transition-colors"
       >
         <span className="material-symbols-outlined">notifications</span>
-        {totalAlerts > 0 && (
+        {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
-            <span className="text-[10px] font-bold text-white leading-none">{totalAlerts > 99 ? '99+' : totalAlerts}</span>
+            <span className="text-[10px] font-bold text-white leading-none">{unreadCount > 99 ? '99+' : unreadCount}</span>
           </span>
         )}
       </button>
@@ -138,157 +192,47 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
               </div>
             ) : (
               <>
-                {/* ===== EXPIRY SECTION ===== */}
-
-                {/* Expired items */}
-                {expiredItems.length > 0 && (
-                  <div>
-                    <div className="px-5 py-2 bg-red-50 border-b border-red-100">
-                      <span className="text-xs font-bold text-red-700 uppercase tracking-wider">
-                        หมดอายุแล้ว ({expiredItems.length})
-                      </span>
-                    </div>
-                    {expiredItems.map(item => {
-                      const daysLeft = getExpiryDaysLeft(item)!;
-                      return (
-                        <div
-                          key={`exp-${item.id}`}
-                          className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
-                          onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
-                        >
-                          <div className="w-9 h-9 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <span className="material-symbols-outlined text-red-500 text-lg">event_busy</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">CAT: {item.cat_code}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                                หมดอายุแล้ว {Math.abs(daysLeft)} วัน
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                หมดอายุ: {formatExpiryDate(item.expiry_date!)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Soon expiring items */}
-                {soonExpiring.length > 0 && (
-                  <div>
-                    <div className="px-5 py-2 bg-amber-50 border-b border-amber-100">
-                      <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
-                        ใกล้หมดอายุ ({soonExpiring.length})
-                      </span>
-                    </div>
-                    {soonExpiring.map(item => {
-                      const daysLeft = getExpiryDaysLeft(item)!;
-                      return (
-                        <div
-                          key={`exp-soon-${item.id}`}
-                          className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
-                          onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
-                        >
-                          <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <span className="material-symbols-outlined text-amber-500 text-lg">schedule</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">CAT: {item.cat_code}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
-                                เหลือ {daysLeft} วัน
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                หมดอายุ: {formatExpiryDate(item.expiry_date!)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* ===== LOW STOCK SECTION ===== */}
-
-                {/* Out of stock */}
-                {outOfStock.length > 0 && (
-                  <div>
-                    <div className="px-5 py-2 bg-red-50 border-b border-red-100">
-                      <span className="text-xs font-bold text-red-700 uppercase tracking-wider">
-                        สต็อกหมด ({outOfStock.length})
-                      </span>
-                    </div>
-                    {outOfStock.map(item => (
-                      <div
-                        key={`stock-${item.id}`}
-                        className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
-                        onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
-                      >
-                        <div className="w-9 h-9 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="material-symbols-outlined text-red-500 text-lg">error</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">CAT: {item.cat_code}</p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                              สต็อกหมด
-                            </span>
-                            <span className="text-[10px] text-slate-400">ขั้นต่ำ: {item.min_stock} {item.unit}</span>
-                          </div>
-                        </div>
-                        <span className="text-2xl font-bold text-red-600 flex-shrink-0">0</span>
+                {sectionOrder.map(type => {
+                  const items = grouped[type];
+                  if (!items) return null;
+                  const config = typeConfig[type];
+                  return (
+                    <div key={type}>
+                      {/* Section Header */}
+                      <div className={`px-5 py-2 ${config.sectionBg} border-b ${config.sectionBorder}`}>
+                        <span className={`text-xs font-bold ${config.sectionText} uppercase tracking-wider`}>
+                          {config.label} ({items.length})
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Almost out */}
-                {almostOut.length > 0 && (
-                  <div>
-                    <div className="px-5 py-2 bg-amber-50 border-b border-amber-100">
-                      <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
-                        สต็อกใกล้หมด ({almostOut.length})
-                      </span>
-                    </div>
-                    {almostOut.map(item => {
-                      const percent = Math.round((item.current_stock / Math.max(item.min_stock, 1)) * 100);
-                      return (
+                      {/* Items */}
+                      {items.map(notif => (
                         <div
-                          key={`stock-low-${item.id}`}
-                          className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer"
-                          onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
+                          key={notif.id}
+                          className={`px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 cursor-pointer ${notif.is_read ? 'opacity-50' : ''}`}
+                          onClick={() => handleClickNotification(notif)}
                         >
-                          <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <span className="material-symbols-outlined text-amber-500 text-lg">inventory_2</span>
+                          <div className={`w-9 h-9 ${config.bgColor} rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                            <span className={`material-symbols-outlined ${config.iconColor} text-lg`}>{config.icon}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">CAT: {item.cat_code}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[120px]">
-                                <div
-                                  className={`h-full rounded-full ${percent <= 30 ? 'bg-red-400' : 'bg-amber-400'}`}
-                                  style={{ width: `${Math.min(100, percent)}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-[10px] text-slate-400">
-                                เหลือ {item.current_stock}/{item.min_stock} {item.unit}
-                              </span>
-                            </div>
+                            <p className={`text-sm ${notif.is_read ? 'font-medium text-slate-500' : 'font-bold text-slate-900'} truncate`}>
+                              {notif.item_name || notif.title}
+                            </p>
+                            {notif.cat_code && (
+                              <p className="text-xs text-slate-400 mt-0.5">CAT: {notif.cat_code}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1">{notif.message}</p>
                           </div>
-                          <span className="text-2xl font-bold text-amber-600 flex-shrink-0">{item.current_stock}</span>
+                          {!notif.is_read && (
+                            <div className="flex-shrink-0 mt-1">
+                              <div className="w-2.5 h-2.5 bg-blue-500 rounded-full"></div>
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })}
               </>
             )}
           </div>

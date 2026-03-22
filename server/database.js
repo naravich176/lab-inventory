@@ -129,6 +129,20 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_users_status      ON users(status);
     CREATE INDEX IF NOT EXISTS idx_procurement_status ON procurement_requests(status);
     CREATE INDEX IF NOT EXISTS idx_procurement_requested_by ON procurement_requests(requested_by);
+
+    -- แจ้งเตือน
+    CREATE TABLE IF NOT EXISTS notifications (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      type        TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      message     TEXT NOT NULL,
+      item_id     INTEGER,
+      is_read     INTEGER DEFAULT 0,
+      created_at  TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+    CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
   `);
 
 }
@@ -773,7 +787,147 @@ function deleteProcurementRequest(id) {
 }
 
 // ============================================================
-// 10) Close DB
+// 10) Notifications
+// ============================================================
+function generateNotifications() {
+  const generate = db.transaction(() => {
+    let generated = 0;
+
+    // Helper: สร้าง notification ถ้ายังไม่มี unread ของ item+type เดียวกัน
+    const existsUnread = db.prepare(
+      'SELECT COUNT(*) as cnt FROM notifications WHERE item_id = @item_id AND type = @type AND is_read = 0'
+    );
+    const insertNotif = db.prepare(`
+      INSERT INTO notifications (type, title, message, item_id)
+      VALUES (@type, @title, @message, @item_id)
+    `);
+
+    // out_of_stock: current_stock = 0
+    const outOfStock = db.prepare(
+      "SELECT * FROM items WHERE current_stock = 0 AND status = 'active'"
+    ).all();
+    for (const item of outOfStock) {
+      if (existsUnread.get({ item_id: item.id, type: 'out_of_stock' }).cnt === 0) {
+        insertNotif.run({
+          type: 'out_of_stock',
+          title: 'สต็อกหมด',
+          message: `${item.name} (${item.cat_code}) — สต็อกหมดแล้ว`,
+          item_id: item.id,
+        });
+        generated++;
+      }
+    }
+
+    // low_stock: current_stock > 0 AND current_stock <= min_stock
+    const lowStock = db.prepare(
+      "SELECT * FROM items WHERE current_stock > 0 AND current_stock <= min_stock AND status = 'active'"
+    ).all();
+    for (const item of lowStock) {
+      if (existsUnread.get({ item_id: item.id, type: 'low_stock' }).cnt === 0) {
+        insertNotif.run({
+          type: 'low_stock',
+          title: 'สต็อกใกล้หมด',
+          message: `${item.name} (${item.cat_code}) — เหลือ ${item.current_stock}/${item.min_stock} ${item.unit}`,
+          item_id: item.id,
+        });
+        generated++;
+      }
+    }
+
+    // expired: expiry_date < date('now')
+    const expired = db.prepare(
+      "SELECT * FROM items WHERE expiry_date IS NOT NULL AND expiry_date < date('now','localtime') AND status = 'active'"
+    ).all();
+    for (const item of expired) {
+      if (existsUnread.get({ item_id: item.id, type: 'expired' }).cnt === 0) {
+        insertNotif.run({
+          type: 'expired',
+          title: 'หมดอายุแล้ว',
+          message: `${item.name} (${item.cat_code}) — หมดอายุวันที่ ${item.expiry_date}`,
+          item_id: item.id,
+        });
+        generated++;
+      }
+    }
+
+    // expiring: within alert window but not yet expired
+    const expiring = db.prepare(`
+      SELECT * FROM items
+      WHERE expiry_date IS NOT NULL
+        AND expiry_date >= date('now','localtime')
+        AND expiry_date <= date('now', '+' || expiry_alert_days || ' days', 'localtime')
+        AND status = 'active'
+    `).all();
+    for (const item of expiring) {
+      if (existsUnread.get({ item_id: item.id, type: 'expiring' }).cnt === 0) {
+        insertNotif.run({
+          type: 'expiring',
+          title: 'ใกล้หมดอายุ',
+          message: `${item.name} (${item.cat_code}) — หมดอายุวันที่ ${item.expiry_date}`,
+          item_id: item.id,
+        });
+        generated++;
+      }
+    }
+
+    return generated;
+  });
+
+  return generate();
+}
+
+function getNotifications({ is_read, type } = {}) {
+  let where = ['1=1'];
+  let params = {};
+
+  if (is_read !== undefined && is_read !== null && is_read !== '') {
+    where.push('n.is_read = @is_read');
+    params.is_read = Number(is_read);
+  }
+  if (type) {
+    where.push('n.type = @type');
+    params.type = type;
+  }
+
+  return db.prepare(`
+    SELECT n.*, i.name as item_name, i.cat_code
+    FROM notifications n
+    LEFT JOIN items i ON n.item_id = i.id
+    WHERE ${where.join(' AND ')}
+    ORDER BY n.created_at DESC
+    LIMIT 200
+  `).all(params);
+}
+
+function getUnreadCount() {
+  return db.prepare('SELECT COUNT(*) as count FROM notifications WHERE is_read = 0').get().count;
+}
+
+function markNotificationAsRead(id) {
+  db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
+  return db.prepare(`
+    SELECT n.*, i.name as item_name, i.cat_code
+    FROM notifications n
+    LEFT JOIN items i ON n.item_id = i.id
+    WHERE n.id = ?
+  `).get(id);
+}
+
+function markAllNotificationsAsRead() {
+  const result = db.prepare("UPDATE notifications SET is_read = 1 WHERE is_read = 0").run();
+  return result.changes;
+}
+
+function deleteOldNotifications(days = 30) {
+  const result = db.prepare(`
+    DELETE FROM notifications
+    WHERE is_read = 1 AND created_at < datetime('now', '-' || @days || ' days', 'localtime')
+  `).run({ days });
+  return result.changes;
+}
+
+// ============================================================
+// 11) Close DB
 // ============================================================
 function closeDatabase() {
   if (db) {
@@ -825,4 +979,11 @@ module.exports = {
   updateProcurementStatus,
   confirmReceived,
   deleteProcurementRequest,
+  // Notifications
+  generateNotifications,
+  getNotifications,
+  getUnreadCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteOldNotifications,
 };

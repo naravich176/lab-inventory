@@ -164,6 +164,18 @@ export interface PaginatedProcurement {
   totalPages: number;
 }
 
+export interface Notification {
+  id: number;
+  type: 'low_stock' | 'out_of_stock' | 'expiring' | 'expired';
+  title: string;
+  message: string;
+  item_id: number | null;
+  item_name?: string;
+  cat_code?: string;
+  is_read: number;
+  created_at: string;
+}
+
 export interface ProcurementFilters {
   status?: string;
   requested_by?: number;
@@ -491,6 +503,31 @@ class ApiClient {
 
   async deleteProcurementRequest(id: number): Promise<{ deleted: boolean }> {
     return this.request<{ deleted: boolean }>('DELETE', `/api/procurement/${id}`);
+  }
+
+  // ============================================================
+  // Notifications
+  // ============================================================
+
+  async getNotifications(filters?: { is_read?: number; type?: string }): Promise<Notification[]> {
+    const query = this.buildQuery(filters || {});
+    return this.request<Notification[]>('GET', `/api/notifications${query}`);
+  }
+
+  async getUnreadCount(): Promise<{ count: number }> {
+    return this.request<{ count: number }>('GET', '/api/notifications/unread-count');
+  }
+
+  async generateNotifications(): Promise<{ generated: number }> {
+    return this.request<{ generated: number }>('POST', '/api/notifications/generate');
+  }
+
+  async markNotificationAsRead(id: number): Promise<Notification> {
+    return this.request<Notification>('PUT', `/api/notifications/${id}/read`);
+  }
+
+  async markAllNotificationsAsRead(): Promise<{ updated: number }> {
+    return this.request<{ updated: number }>('PUT', '/api/notifications/read-all');
   }
 }
 
