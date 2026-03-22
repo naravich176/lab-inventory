@@ -180,13 +180,13 @@ class ApiClient {
   constructor(baseUrl?: string) {
     // ลำดับการหา server URL:
     // 1. parameter ที่ส่งเข้ามา
-    // 2. environment variable (Vite)
-    // 3. localStorage (user เคยตั้งค่าไว้)
-    // 4. default localhost:3000
+    // 2. localStorage (user เคยตั้งค่าไว้)
+    // 3. environment variable (Vite)
+    // 4. window.location.origin (production — server serve ทั้ง API + frontend)
     this.baseUrl = baseUrl
-      || (import.meta as any).env?.VITE_API_URL
       || localStorage.getItem('api_base_url')
-      || 'http://localhost:3000';
+      || (import.meta as any).env?.VITE_API_URL
+      || window.location.origin;
 
     // ลองดึง token จาก localStorage (ถ้ามี)
     const savedToken = localStorage.getItem('auth_token');

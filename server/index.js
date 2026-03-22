@@ -6,6 +6,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const db = require('./database');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -67,13 +68,31 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/procurement', procurementRoutes);
 
-// 404 handler
+// 404 handler for API routes
 app.use('/api/*', (req, res) => {
   res.status(404).json({
     success: false,
     error: `ไม่พบ endpoint: ${req.method} ${req.originalUrl}`,
   });
 });
+
+// ============================================================
+// Serve Frontend (Production Build)
+// ============================================================
+
+const frontendPath = path.join(__dirname, '..', 'dist');
+
+if (fs.existsSync(frontendPath)) {
+  app.use(express.static(frontendPath));
+
+  // SPA fallback — ทุก route ที่ไม่ใช่ /api ให้ส่ง index.html
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+
+  console.log(`[Static] Serving frontend from ${frontendPath}`);
+}
 
 // Global error handler (ต้องอยู่หลังสุด)
 app.use(errorHandler);
@@ -86,23 +105,16 @@ app.use(errorHandler);
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'lab-inventory.db');
 db.initDatabase(dbPath);
 
+const hasFrontend = fs.existsSync(frontendPath);
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('╔══════════════════════════════════════════════╗');
-  console.log('║   🧪 Lab Inventory API Server               ║');
+  console.log('║   🧪 Lab Inventory Server                   ║');
   console.log(`║   🌐 http://localhost:${PORT}                  ║`);
   console.log(`║   📁 Database: ${path.basename(dbPath)}       ║`);
+  console.log(`║   🖥️  Frontend: ${hasFrontend ? 'Serving from dist/' : 'Not built (run pnpm build)'}  ║`);
   console.log('║   🔑 Default: admin / admin123               ║');
-  console.log('╠══════════════════════════════════════════════╣');
-  console.log('║   Endpoints:                                 ║');
-  console.log('║   POST   /api/auth/login                     ║');
-  console.log('║   GET    /api/auth/me                        ║');
-  console.log('║   GET    /api/categories                     ║');
-  console.log('║   GET    /api/items                          ║');
-  console.log('║   GET    /api/users                          ║');
-  console.log('║   GET    /api/transactions                   ║');
-  console.log('║   GET    /api/reports/dashboard               ║');
-  console.log('║   GET    /api/health                         ║');
   console.log('╚══════════════════════════════════════════════╝');
   console.log('');
 });
