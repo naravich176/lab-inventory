@@ -453,15 +453,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNavigateHome }) => {
       )}
 
       <div className="p-8 max-w-7xl mx-auto w-full">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-          <button onClick={onNavigateHome} className="hover:text-[#14b84b] transition-colors flex items-center gap-1">
-            <span className="material-symbols-outlined text-base">home</span>
-            <span>หน้าหลัก</span>
-          </button>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-[#14b84b] font-medium">จัดการผู้ใช้</span>
-        </div>
+
 
         {/* Title */}
         <div className="flex items-center justify-between mb-6">

@@ -509,7 +509,7 @@ const ReceiveNewItemModal: React.FC<ReceiveNewItemModalProps> = ({ request, onSa
     setLoading(true);
     setError(null);
     try {
-      await api.confirmProcurementReceived(request.id, user?.id, {
+      await api.confirmProcurementReceived(request.id, {
         name: name.trim(),
         cat_code: catCode.trim(),
         unit: unit.trim() || 'ชิ้น',
@@ -785,7 +785,7 @@ interface ProcurementProps {
   onNavigateHome?: () => void;
 }
 
-const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
+const Procurement: React.FC<ProcurementProps> = () => {
   const { user, isAdmin, isStaff, isProcurement } = useAuth();
   const canCreate = isStaff || isAdmin;
   const canUpdateStatus = isProcurement || isAdmin;
@@ -800,6 +800,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
 
   // Filters
   const [filterStatus, setFilterStatus] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
@@ -815,6 +816,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
     try {
       const data = await api.getProcurementRequests({
         status: filterStatus || undefined,
+        search: searchTerm || undefined,
         page,
         limit,
       });
@@ -823,10 +825,10 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
       setTotalPages(data.totalPages);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [filterStatus, page]);
+  }, [filterStatus, searchTerm, page]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
-  useEffect(() => { setPage(1); }, [filterStatus]);
+  useEffect(() => { setPage(1); }, [filterStatus, searchTerm]);
 
   const handleDelete = async () => {
     if (!deletingRequest) return;
@@ -859,7 +861,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
     if (!receivingRequest || !user) return;
     setReceiveLoading(true);
     try {
-      await api.confirmProcurementReceived(receivingRequest.id, user.id);
+      await api.confirmProcurementReceived(receivingRequest.id);
       setToast({ message: 'ยืนยันรับพัสดุสำเร็จ — เพิ่ม stock แล้ว', type: 'success' });
       setReceivingRequest(null);
       fetchRequests();
@@ -915,17 +917,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
         />
       )}
 
-      <div className="p-8 max-w-7xl mx-auto w-full">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-          <button onClick={onNavigateHome} className="hover:text-[#14b84b] transition-colors flex items-center gap-1">
-            <span className="material-symbols-outlined text-base">home</span>
-            <span>หน้าหลัก</span>
-          </button>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-[#14b84b] font-medium">จัดซื้อจัดจ้าง</span>
-        </div>
-
+      <div className="p-8 max-w-[1400px] mx-auto w-full">
         {/* Title */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -976,6 +968,16 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                 </button>
               ))}
             </div>
+            <div className="relative ml-auto">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+              <input
+                type="text"
+                placeholder="ค้นหาชื่อหรือรหัสวัสดุ..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-[#14b84b] transition-all w-64"
+              />
+            </div>
           </div>
 
           {/* Table */}
@@ -983,13 +985,15 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                  <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-16">รหัส</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-16">ลำดับ</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">รหัสวัสดุ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">ชื่อวัสดุ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 text-center">จำนวน</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">ผู้แจ้ง</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">วันที่แจ้ง</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">สถานะ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">ผู้รับพัสดุ</th>
-                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">วันที่</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">วันที่รับ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">หมายเหตุ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-24"></th>
                 </tr>
@@ -998,14 +1002,14 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                 {loading ? (
                   Array.from({ length: 4 }).map((_, i) => (
                     <tr key={`sk-${i}`}>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 11 }).map((_, j) => (
                         <td key={j} className="px-5 py-4"><div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: j === 1 ? '60%' : '40%' }}></div></td>
                       ))}
                     </tr>
                   ))
                 ) : requests.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-5 py-16 text-center">
+                    <td colSpan={11} className="px-5 py-16 text-center">
                       <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">shopping_cart</span>
                       <p className="text-slate-400 text-sm mb-4">ยังไม่มีคำขอจัดซื้อ</p>
                       {canCreate && (
@@ -1021,6 +1025,9 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                       <td className="px-5 py-3.5 text-sm font-medium text-slate-400">
                         #{String(req.id).padStart(3, '0')}
                       </td>
+                      <td className="px-5 py-3.5 text-sm text-slate-600">
+                        {req.cat_code || '-'}
+                      </td>
                       <td className="px-5 py-3.5">
                         <span className="font-bold text-slate-900 text-sm">{req.item_name}</span>
                         {req.reason && <p className="text-xs text-slate-400 mt-0.5">{req.reason}</p>}
@@ -1029,32 +1036,28 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                         <span className="font-bold text-slate-900">{req.quantity}</span>
                         <span className="text-slate-400 text-xs ml-1">{req.unit}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-600">{req.requested_by_name}</td>
+                      <td className="px-5 py-3.5 text-sm font-medium text-slate-900">{req.requested_by_name}</td>
+                      <td className="px-5 py-3.5 text-sm text-slate-500">{formatDate(req.created_at)}</td>
                       <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[req.status] || 'bg-slate-100 text-slate-800'}`}>
                           {statusLabels[req.status] || req.status}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
-                        {req.received_by_user_name ? (
-                          <div>
-                            <span className="text-sm font-medium text-slate-900">{req.received_by_user_name}</span>
-                            {req.received_at && (
-                              <p className="text-xs text-slate-400 mt-0.5">{formatDate(req.received_at)}</p>
-                            )}
-                          </div>
+                        {req.received_by_name ? (
+                          <span className="text-sm font-medium text-slate-900">{req.received_by_name}</span>
                         ) : (
                           <span className="text-sm text-slate-300">-</span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-slate-500">{formatDate(req.created_at)}</td>
+                      <td className="px-5 py-3.5 text-sm text-slate-500">{req.received_at ? formatDate(req.received_at) : '-'}</td>
                       <td className="px-5 py-3.5 text-sm text-slate-500 max-w-[150px] truncate">{req.note || '-'}</td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1">
                           {canUpdateStatus && req.status !== 'received' && (
                             <button
                               onClick={() => setUpdatingRequest(req)}
-                              className="p-1.5 text-slate-400 hover:text-[#14b84b] hover:bg-green-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              className="p-1.5 text-slate-400 hover:text-[#14b84b] hover:bg-green-50 rounded-lg transition-colors "
                               title="อัพเดตสถานะ"
                             >
                               <span className="material-symbols-outlined text-lg">update</span>
@@ -1063,7 +1066,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                           {canReceive && req.status === 'delivered' && (
                             <button
                               onClick={() => setReceivingRequest(req)}
-                              className="p-1.5 text-slate-400 hover:text-[#14b84b] hover:bg-green-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              className="p-1.5 text-slate-400 hover:text-[#14b84b] hover:bg-green-50 rounded-lg transition-colors "
                               title="ยืนยันรับพัสดุ"
                             >
                               <span className="material-symbols-outlined text-lg">inventory</span>
@@ -1072,7 +1075,7 @@ const Procurement: React.FC<ProcurementProps> = ({ onNavigateHome }) => {
                           {isAdmin && req.status === 'requested' && (
                             <button
                               onClick={() => setDeletingRequest(req)}
-                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors "
                               title="ลบ"
                             >
                               <span className="material-symbols-outlined text-lg">delete</span>

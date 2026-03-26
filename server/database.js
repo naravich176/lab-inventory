@@ -110,13 +110,11 @@ function createTables() {
       note          TEXT    DEFAULT '',
       received_by       INTEGER DEFAULT NULL,
       received_at       TEXT DEFAULT NULL,
-      received_by_user  INTEGER DEFAULT NULL,
       created_at    TEXT    DEFAULT (datetime('now','localtime')),
       updated_at    TEXT    DEFAULT (datetime('now','localtime')),
       FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE SET NULL,
       FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE RESTRICT,
-      FOREIGN KEY (received_by) REFERENCES users(id),
-      FOREIGN KEY (received_by_user) REFERENCES users(id)
+      FOREIGN KEY (received_by) REFERENCES users(id)
     );
 
     -- Indexes สำหรับ query ที่ใช้บ่อย
@@ -252,6 +250,14 @@ function getItems({ categoryId, search, status, stockStatus, sort, page = 1, lim
   let where = ['1=1'];
   let params = {};
 
+  // Default to showing only active items unless a specific status is requested
+  if (status) {
+    where.push('i.status = @status');
+    params.status = status;
+  } else {
+    where.push("i.status = 'active'");
+  }
+
   if (categoryId) {
     where.push('i.category_id = @categoryId');
     params.categoryId = categoryId;
@@ -259,10 +265,6 @@ function getItems({ categoryId, search, status, stockStatus, sort, page = 1, lim
   if (search) {
     where.push('(i.name LIKE @search OR i.cat_code LIKE @search)');
     params.search = `%${search}%`;
-  }
-  if (status) {
-    where.push('i.status = @status');
-    params.status = status;
   }
   if (stockStatus === 'out') {
     where.push('i.current_stock <= 0');
@@ -503,6 +505,7 @@ function getExpiringItems() {
 function getMonthlySummary(year, month) {
   return db.prepare(`
     SELECT
+      t.item_id,
       i.name as item_name,
       i.unit,
       c.name as category_name,
@@ -510,13 +513,23 @@ function getMonthlySummary(year, month) {
       SUM(CASE WHEN t.type = 'add' THEN t.quantity ELSE 0 END) as total_added,
       COUNT(*) as transaction_count
     FROM transactions t
-    LEFT JOIN items i ON t.item_id = i.id
+    JOIN items i ON t.item_id = i.id AND i.status = 'active'
     LEFT JOIN categories c ON i.category_id = c.id
     WHERE strftime('%Y', t.date) = @year
       AND strftime('%m', t.date) = @month
     GROUP BY t.item_id
     ORDER BY total_withdrawn DESC
   `).all({ year: String(year), month: String(month).padStart(2, '0') });
+}
+
+function deleteMonthlyTransactions(itemId, year, month) {
+  const result = db.prepare(`
+    DELETE FROM transactions
+    WHERE item_id = @itemId
+      AND strftime('%Y', date) = @year
+      AND strftime('%m', date) = @month
+  `).run({ itemId, year: String(year), month: String(month).padStart(2, '0') });
+  return result.changes;
 }
 
 function getDashboardStats() {
@@ -644,7 +657,7 @@ function createProcurementRequest(data) {
   return getProcurementRequestById(result.lastInsertRowid);
 }
 
-function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } = {}) {
+function getProcurementRequests({ status, requested_by, search, page = 1, limit = 20 } = {}) {
   let where = ['1=1'];
   let params = {};
 
@@ -655,6 +668,10 @@ function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } =
   if (requested_by) {
     where.push('pr.requested_by = @requested_by');
     params.requested_by = requested_by;
+  }
+  if (search) {
+    where.push("(pr.item_name LIKE @search OR EXISTS (SELECT 1 FROM items i2 WHERE i2.id = pr.item_id AND i2.cat_code LIKE @search))");
+    params.search = `%${search}%`;
   }
 
   const whereClause = where.join(' AND ');
@@ -667,12 +684,11 @@ function getProcurementRequests({ status, requested_by, page = 1, limit = 20 } =
   const requests = db.prepare(`
     SELECT pr.*, u.display_name as requested_by_name,
            u2.display_name as received_by_name,
-           u3.display_name as received_by_user_name,
-           u3.department as received_by_user_department
+           i.cat_code as cat_code
     FROM procurement_requests pr
     LEFT JOIN users u ON pr.requested_by = u.id
     LEFT JOIN users u2 ON pr.received_by = u2.id
-    LEFT JOIN users u3 ON pr.received_by_user = u3.id
+    LEFT JOIN items i ON pr.item_id = i.id
     WHERE ${whereClause}
     ORDER BY pr.id DESC
     LIMIT @limit OFFSET @offset
@@ -691,14 +707,34 @@ function getProcurementRequestById(id) {
   return db.prepare(`
     SELECT pr.*, u.display_name as requested_by_name,
            u2.display_name as received_by_name,
-           u3.display_name as received_by_user_name,
-           u3.department as received_by_user_department
+           i.cat_code as cat_code
     FROM procurement_requests pr
     LEFT JOIN users u ON pr.requested_by = u.id
     LEFT JOIN users u2 ON pr.received_by = u2.id
-    LEFT JOIN users u3 ON pr.received_by_user = u3.id
+    LEFT JOIN items i ON pr.item_id = i.id
     WHERE pr.id = ?
   `).get(id);
+}
+
+const procurementStatusLabels = {
+  requested: 'แจ้งคำขอ',
+  ordering: 'กำลังสั่งซื้อ',
+  shipping: 'ระหว่างจัดส่ง',
+  delivered: 'ส่งถึงแล้ว',
+  received: 'รับแล้ว',
+};
+
+function createProcurementNotification(request, newStatus) {
+  const label = procurementStatusLabels[newStatus] || newStatus;
+  db.prepare(`
+    INSERT INTO notifications (type, title, message, item_id)
+    VALUES (@type, @title, @message, @item_id)
+  `).run({
+    type: 'procurement_status',
+    title: `จัดซื้อ: ${label}`,
+    message: `${request.item_name} (จำนวน ${request.quantity} ${request.unit}) — สถานะเปลี่ยนเป็น "${label}"`,
+    item_id: request.item_id || null,
+  });
 }
 
 function updateProcurementStatus(id, { status, note }) {
@@ -714,10 +750,13 @@ function updateProcurementStatus(id, { status, note }) {
     status,
     note: note ?? existing.note,
   });
+
+  createProcurementNotification(existing, status);
+
   return getProcurementRequestById(id);
 }
 
-function confirmReceived(id, userId, newItemData, receiverUserId) {
+function confirmReceived(id, userId, newItemData) {
   const confirm = db.transaction(() => {
     const existing = getProcurementRequestById(id);
     if (!existing) throw new Error('ไม่พบคำขอจัดซื้อ');
@@ -731,7 +770,7 @@ function confirmReceived(id, userId, newItemData, receiverUserId) {
         item_id: existing.item_id,
         quantity: existing.quantity,
         note: `รับพัสดุจากคำขอจัดซื้อ #${id}`,
-        user_id: receiverUserId || null,
+        user_id: userId,
       });
     } else if (newItemData) {
       // วัสดุใหม่ → สร้าง item แล้ว addStock
@@ -751,7 +790,7 @@ function confirmReceived(id, userId, newItemData, receiverUserId) {
         item_id: newItem.id,
         quantity: existing.quantity,
         note: `รับพัสดุจากคำขอจัดซื้อ #${id} (วัสดุใหม่)`,
-        user_id: receiverUserId || null,
+        user_id: userId,
       });
       // อัพเดต item_id ใน procurement request
       db.prepare('UPDATE procurement_requests SET item_id = ? WHERE id = ?').run(newItem.id, id);
@@ -764,11 +803,12 @@ function confirmReceived(id, userId, newItemData, receiverUserId) {
       UPDATE procurement_requests
       SET status = 'received',
           received_by = @userId,
-          received_by_user = @receiverUserId,
           received_at = datetime('now','localtime'),
           updated_at = datetime('now','localtime')
       WHERE id = @id
-    `).run({ id, userId, receiverUserId: receiverUserId || null });
+    `).run({ id, userId });
+
+    createProcurementNotification(existing, 'received');
 
     return getProcurementRequestById(id);
   });
@@ -791,6 +831,9 @@ function deleteProcurementRequest(id) {
 // ============================================================
 function generateNotifications() {
   const generate = db.transaction(() => {
+    // ลบ notification ที่อ่านแล้วทั้งหมดอัตโนมัติ
+    db.prepare("DELETE FROM notifications WHERE is_read = 1").run();
+
     let generated = 0;
 
     // Helper: สร้าง notification ถ้ายังไม่มี unread ของ item+type เดียวกัน
@@ -963,6 +1006,7 @@ module.exports = {
   getLowStockItems,
   getExpiringItems,
   getMonthlySummary,
+  deleteMonthlyTransactions,
   getDashboardStats,
   // Users / Auth
   getUserByUsername,

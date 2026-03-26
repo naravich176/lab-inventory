@@ -287,15 +287,7 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
 
       <div className="p-8 max-w-7xl mx-auto w-full">
 
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-          <button onClick={onNavigateHome} className="hover:text-[#14b84b] transition-colors flex items-center gap-1">
-            <span className="material-symbols-outlined text-base">home</span>
-            <span>หน้าหลัก</span>
-          </button>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-[#14b84b] font-medium">จัดการวัสดุอุปกรณ์</span>
-        </div>
+
 
         {/* Title + Add Button */}
         <div className="flex items-center justify-between mb-6">
@@ -375,11 +367,12 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-16">ลำดับ</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">รหัสวัสดุ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">รายการวัสดุ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">หมวดหมู่</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200">สถานะ</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 text-center">คงเหลือ</th>
-                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">อัปเดต</th>
+                  <th className="px-5 py-3.5 font-bold border-b border-slate-200">วันที่แก้ไข</th>
                   <th className="px-5 py-3.5 font-bold border-b border-slate-200 w-24"></th>
                 </tr>
               </thead>
@@ -387,14 +380,14 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={`sk-${i}`}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 8 }).map((_, j) => (
                         <td key={j} className="px-5 py-4"><div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: j === 1 ? '60%' : '40%' }}></div></td>
                       ))}
                     </tr>
                   ))
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-16 text-center">
+                    <td colSpan={8} className="px-5 py-16 text-center">
                       <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">inventory_2</span>
                       <p className="text-slate-400 text-sm mb-4">
                         {debouncedSearch ? 'ไม่พบรายการที่ค้นหา' : 'ยังไม่มีรายการวัสดุ'}
@@ -415,15 +408,15 @@ const ItemManagement: React.FC<ItemManagementProps> = ({ onNavigateHome }) => {
                         <td className="px-5 py-3.5 text-sm font-medium text-slate-400">
                           {String(rowNum).padStart(2, '0')}
                         </td>
+                        <td className="px-5 py-3.5 text-sm text-slate-600">
+                          {item.cat_code}
+                        </td>
                         <td className="px-5 py-3.5">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-900 text-sm">{item.name}</span>
-                            <span className="text-xs text-slate-400">CAT: {item.cat_code}</span>
-                          </div>
+                          <span className="font-bold text-slate-900 text-sm">{item.name}</span>
                         </td>
                         <td className="px-5 py-3.5">
                           {item.category_name && (
-                            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                            <span className="text-sm text-slate-600">
                               {item.category_name}
                             </span>
                           )}

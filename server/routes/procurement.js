@@ -12,10 +12,11 @@ router.use(authenticateToken);
 // GET /api/procurement — ดูรายการจัดซื้อ (ทุก role)
 router.get('/', (req, res, next) => {
   try {
-    const { status, requested_by, page = 1, limit = 20 } = req.query;
+    const { status, requested_by, search, page = 1, limit = 20 } = req.query;
     const result = db.getProcurementRequests({
       status: status || undefined,
       requested_by: requested_by ? Number(requested_by) : undefined,
+      search: search || undefined,
       page: Number(page),
       limit: Number(limit),
     });
@@ -100,9 +101,9 @@ router.put('/:id/status', requireProcurementOrAdmin, (req, res, next) => {
 router.put('/:id/receive', requireStaffOrAdmin, (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const { new_item, receiver_user_id } = req.body;
+    const { new_item } = req.body;
 
-    const result = db.confirmReceived(id, req.user.id, new_item || null, receiver_user_id ? Number(receiver_user_id) : null);
+    const result = db.confirmReceived(id, req.user.id, new_item || null);
     res.json({ success: true, data: result });
   } catch (err) {
     if (err.message.includes('ไม่พบ') || err.message.includes('ยืนยันรับได้เฉพาะ') || err.message.includes('วัสดุใหม่ต้อง') || err.message.includes('UNIQUE')) {

@@ -7,6 +7,7 @@ import type { Notification } from '../api/client';
 // ============================================================
 interface NotificationPanelProps {
   onNavigateItems?: () => void;
+  onNavigateProcurement?: () => void;
 }
 
 const typeConfig: Record<string, { icon: string; bgColor: string; iconColor: string; sectionBg: string; sectionBorder: string; sectionText: string; label: string }> = {
@@ -46,12 +47,21 @@ const typeConfig: Record<string, { icon: string; bgColor: string; iconColor: str
     sectionText: 'text-orange-700',
     label: 'ใกล้หมดอายุ',
   },
+  procurement_status: {
+    icon: 'local_shipping',
+    bgColor: 'bg-blue-100',
+    iconColor: 'text-blue-500',
+    sectionBg: 'bg-blue-50',
+    sectionBorder: 'border-blue-100',
+    sectionText: 'text-blue-700',
+    label: 'สถานะจัดซื้อ',
+  },
 };
 
 // ลำดับการแสดงผล sections
-const sectionOrder: string[] = ['expired', 'expiring', 'out_of_stock', 'low_stock'];
+const sectionOrder: string[] = ['procurement_status', 'expired', 'expiring', 'out_of_stock', 'low_stock'];
 
-const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }) => {
+const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems, onNavigateProcurement }) => {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -129,7 +139,11 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
       await handleMarkAsRead(notif.id);
     }
     setOpen(false);
-    if (onNavigateItems) onNavigateItems();
+    if (notif.type === 'procurement_status') {
+      if (onNavigateProcurement) onNavigateProcurement();
+    } else {
+      if (onNavigateItems) onNavigateItems();
+    }
   };
 
   // Group notifications by type
@@ -188,7 +202,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
                   <span className="material-symbols-outlined text-[#14b84b] text-2xl">check_circle</span>
                 </div>
                 <p className="text-sm font-medium text-slate-900 mb-1">ไม่มีรายการแจ้งเตือน</p>
-                <p className="text-xs text-slate-400">วัสดุทุกรายการมีสต็อกเพียงพอและยังไม่หมดอายุ</p>
+                <p className="text-xs text-slate-400">ไม่มีการแจ้งเตือนในขณะนี้</p>
               </div>
             ) : (
               <>
@@ -236,18 +250,6 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ onNavigateItems }
               </>
             )}
           </div>
-
-          {/* Footer */}
-          {totalAlerts > 0 && (
-            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
-              <button
-                onClick={() => { setOpen(false); if (onNavigateItems) onNavigateItems(); }}
-                className="w-full text-center text-xs font-bold text-[#14b84b] hover:text-[#0ea53e] transition-colors py-1"
-              >
-                ดูรายการวัสดุทั้งหมด →
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

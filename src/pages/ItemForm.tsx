@@ -151,14 +151,6 @@ const ItemForm: React.FC<ItemFormProps> = ({ editItem, onSave, onCancel }) => {
 
       {/* Breadcrumb & Title */}
       <div className="p-8 max-w-5xl mx-auto w-full">
-        <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-          <span className="material-symbols-outlined text-base">inventory_2</span>
-          <span>จัดการวัสดุอุปกรณ์</span>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-[#14b84b] font-medium">
-            {isEdit ? 'แก้ไขรายการวัสดุ' : 'เพิ่มรายการวัสดุอุปกรณ์'}
-          </span>
-        </div>
 
         {/* Title */}
         <div className="mb-8">

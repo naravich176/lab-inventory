@@ -56,11 +56,11 @@ const Login: React.FC = () => {
       <div className="w-full max-w-md mx-4">
         {/* Logo & Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#14b84b] to-[#0ea53e] rounded-2xl shadow-lg shadow-green-500/30 mb-4">
-            <span className="text-4xl">🧪</span>
+          <div className="inline-flex items-center justify-center w-20 h-20 mb-4">
+            <img src="/pngtree-green-lab-logo-png-image_5969669.png" alt="Lab Stock" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">ระบบจัดการคลังแล็บ</h1>
-          <p className="text-sm text-slate-500 mt-1">Lab Inventory Management System</p>
+          <p className="text-sm text-slate-500 mt-1">Lab Stock</p>
         </div>
 
         {/* Login Card */}
@@ -184,10 +184,7 @@ const Login: React.FC = () => {
           </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-slate-400 mt-6">
-          ระบบจัดการคลังวัสดุอุปกรณ์ห้องปฏิบัติการ
-        </p>
+        
       </div>
     </div>
   );

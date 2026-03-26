@@ -647,7 +647,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
       {/* Navbar ถูกย้ายไป App.tsx แล้ว */}
 
       {/* Main */}
-      <main className="flex-1 px-10 py-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-10 py-8 max-w-[1600px] mx-auto w-full">
         <div className="flex gap-8">
 
           {/* Sidebar */}
@@ -788,7 +788,7 @@ const Home: React.FC<HomeProps> = ({ onNavigateItems }) => {
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                     <th className="px-6 py-4 font-bold border-b border-slate-200">ลำดับที่</th>
-                    <th className="px-6 py-4 font-bold border-b border-slate-200">รหัส</th>
+                    <th className="px-6 py-4 font-bold border-b border-slate-200">รหัสวัสดุ</th>
                     <th className="px-6 py-4 font-bold border-b border-slate-200">รายการวัสดุ</th>
                     <th className="px-6 py-4 font-bold border-b border-slate-200">สถานะ</th>
                     <th className="px-6 py-4 font-bold border-b border-slate-200 text-center">คงเหลือ</th>

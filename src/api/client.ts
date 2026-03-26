@@ -84,6 +84,7 @@ export interface DashboardStats {
 }
 
 export interface MonthlySummary {
+  item_id: number;
   item_name: string;
   unit: string;
   category_name: string;
@@ -139,6 +140,7 @@ export interface ProcurementRequest {
   id: number;
   item_id: number | null;
   item_name: string;
+  cat_code: string | null;
   quantity: number;
   unit: string;
   reason: string;
@@ -148,9 +150,6 @@ export interface ProcurementRequest {
   note: string;
   received_by: number | null;
   received_by_name: string | null;
-  received_by_user: number | null;
-  received_by_user_name: string | null;
-  received_by_user_department: string | null;
   received_at: string | null;
   created_at: string;
   updated_at: string;
@@ -166,7 +165,7 @@ export interface PaginatedProcurement {
 
 export interface Notification {
   id: number;
-  type: 'low_stock' | 'out_of_stock' | 'expiring' | 'expired';
+  type: 'low_stock' | 'out_of_stock' | 'expiring' | 'expired' | 'procurement_status';
   title: string;
   message: string;
   item_id: number | null;
@@ -179,6 +178,7 @@ export interface Notification {
 export interface ProcurementFilters {
   status?: string;
   requested_by?: number;
+  search?: string;
   page?: number;
   limit?: number;
 }
@@ -433,6 +433,14 @@ class ApiClient {
     );
   }
 
+  async deleteMonthlyTransactions(itemId: number, year: number, month: number): Promise<{ deleted: number }> {
+    return this.request<{ deleted: number }>(
+      'DELETE',
+      '/api/reports/monthly-transactions',
+      { item_id: itemId, year, month }
+    );
+  }
+
   async getDashboardStats(): Promise<DashboardStats> {
     return this.request<DashboardStats>('GET', '/api/reports/dashboard');
   }
@@ -485,7 +493,7 @@ class ApiClient {
     return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/status`, data);
   }
 
-  async confirmProcurementReceived(id: number, receiverUserId?: number, newItem?: {
+  async confirmProcurementReceived(id: number, newItem?: {
     name: string;
     cat_code: string;
     unit: string;
@@ -497,7 +505,6 @@ class ApiClient {
   }): Promise<ProcurementRequest> {
     return this.request<ProcurementRequest>('PUT', `/api/procurement/${id}/receive`, {
       new_item: newItem || undefined,
-      receiver_user_id: receiverUserId || undefined,
     });
   }
 

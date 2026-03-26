@@ -16,7 +16,7 @@ const thaiMonthsShort = [
 // SVG Bar Chart Component
 // ============================================================
 interface BarChartProps {
-  data: { label: string; withdrawn: number; added: number }[];
+  data: { label: string; fullLabel: string; withdrawn: number; added: number }[];
   height?: number;
 }
 
@@ -101,36 +101,48 @@ const BarChart: React.FC<BarChartProps> = ({ data, height = 280 }) => {
                 className="transition-all duration-200"
               />
 
-              {/* X-axis label */}
+              {/* X-axis label - short index */}
               <text
                 x={cx}
                 y={height - padding.bottom + 18}
                 textAnchor="middle"
-                className="text-[11px] fill-slate-500 font-medium"
+                className="text-[11px] fill-slate-400 font-medium"
               >
                 {d.label}
               </text>
 
-              {/* Tooltip */}
+              {/* Tooltip with full name */}
               {isHovered && (
                 <g>
-                  <rect
-                    x={cx - 55}
-                    y={padding.top - 8}
-                    width={110}
-                    height={36}
-                    rx={6}
-                    fill="white"
-                    stroke="#e2e8f0"
-                    strokeWidth={1}
-                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.08))"
-                  />
-                  <text x={cx} y={padding.top + 7} textAnchor="middle" className="text-[10px] fill-blue-600 font-medium">
-                    รับเข้า: {d.added}
-                  </text>
-                  <text x={cx} y={padding.top + 21} textAnchor="middle" className="text-[10px] fill-green-600 font-medium">
-                    เบิกออก: {d.withdrawn}
-                  </text>
+                  {(() => {
+                    const tooltipText = d.fullLabel;
+                    const tooltipW = Math.max(120, tooltipText.length * 8 + 24);
+                    const tooltipX = Math.max(tooltipW / 2, Math.min(cx, width - tooltipW / 2));
+                    return (
+                      <>
+                        <rect
+                          x={tooltipX - tooltipW / 2}
+                          y={padding.top - 8}
+                          width={tooltipW}
+                          height={50}
+                          rx={6}
+                          fill="white"
+                          stroke="#e2e8f0"
+                          strokeWidth={1}
+                          filter="drop-shadow(0 2px 4px rgba(0,0,0,0.08))"
+                        />
+                        <text x={tooltipX} y={padding.top + 7} textAnchor="middle" className="text-[10px] fill-slate-700 font-bold">
+                          {tooltipText}
+                        </text>
+                        <text x={tooltipX} y={padding.top + 21} textAnchor="middle" className="text-[10px] fill-blue-600 font-medium">
+                          รับเข้า: {d.added}
+                        </text>
+                        <text x={tooltipX} y={padding.top + 35} textAnchor="middle" className="text-[10px] fill-green-600 font-medium">
+                          เบิกออก: {d.withdrawn}
+                        </text>
+                      </>
+                    );
+                  })()}
                 </g>
               )}
             </g>
@@ -140,79 +152,6 @@ const BarChart: React.FC<BarChartProps> = ({ data, height = 280 }) => {
         {/* X-axis line */}
         <line x1={padding.left} y1={padding.top + chartH} x2={width - padding.right} y2={padding.top + chartH} stroke="#cbd5e1" />
       </svg>
-    </div>
-  );
-};
-
-// ============================================================
-// Donut Chart Component (สัดส่วนตามหมวดหมู่)
-// ============================================================
-interface DonutChartProps {
-  data: { label: string; value: number; color: string }[];
-  size?: number;
-}
-
-const DonutChart: React.FC<DonutChartProps> = ({ data, size = 180 }) => {
-  const total = data.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return <div className="text-sm text-slate-400 text-center py-8">ไม่มีข้อมูล</div>;
-
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = size / 2 - 10;
-  const innerRadius = radius * 0.6;
-
-  let startAngle = -90;
-
-  const arcs = data.map(d => {
-    const angle = (d.value / total) * 360;
-    const endAngle = startAngle + angle;
-
-    const startRad = (startAngle * Math.PI) / 180;
-    const endRad = (endAngle * Math.PI) / 180;
-
-    const x1 = cx + radius * Math.cos(startRad);
-    const y1 = cy + radius * Math.sin(startRad);
-    const x2 = cx + radius * Math.cos(endRad);
-    const y2 = cy + radius * Math.sin(endRad);
-
-    const ix1 = cx + innerRadius * Math.cos(startRad);
-    const iy1 = cy + innerRadius * Math.sin(startRad);
-    const ix2 = cx + innerRadius * Math.cos(endRad);
-    const iy2 = cy + innerRadius * Math.sin(endRad);
-
-    const largeArc = angle > 180 ? 1 : 0;
-
-    const path = [
-      `M ${x1} ${y1}`,
-      `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
-      `L ${ix2} ${iy2}`,
-      `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${ix1} ${iy1}`,
-      'Z',
-    ].join(' ');
-
-    startAngle = endAngle;
-    return { ...d, path, percentage: Math.round((d.value / total) * 100) };
-  });
-
-  return (
-    <div className="flex items-center gap-6">
-      <svg width={size} height={size} className="flex-shrink-0">
-        {arcs.map((arc, i) => (
-          <path key={i} d={arc.path} fill={arc.color} className="hover:opacity-80 transition-opacity cursor-pointer" />
-        ))}
-        <text x={cx} y={cy - 6} textAnchor="middle" className="text-2xl font-bold fill-slate-900">{total}</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" className="text-[10px] fill-slate-400">รายการทั้งหมด</text>
-      </svg>
-      <div className="space-y-2">
-        {arcs.map((arc, i) => (
-          <div key={i} className="flex items-center gap-2 text-sm">
-            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: arc.color }}></div>
-            <span className="text-slate-600">{arc.label}</span>
-            <span className="font-bold text-slate-900">{arc.value}</span>
-            <span className="text-slate-400 text-xs">({arc.percentage}%)</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
@@ -289,6 +228,7 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
     else fetchYearlyData();
   }, [viewMode, fetchMonthlySummary, fetchYearlyData]);
 
+
   // ============================================================
   // Computed
   // ============================================================
@@ -296,26 +236,10 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
   const totalAdded = monthlySummary.reduce((s, r) => s + r.total_added, 0);
   const totalTransactions = monthlySummary.reduce((s, r) => s + r.transaction_count, 0);
 
-  // Category breakdown for donut chart
-  const categoryMap = new Map<string, number>();
-  monthlySummary.forEach(r => {
-    categoryMap.set(r.category_name, (categoryMap.get(r.category_name) || 0) + r.total_withdrawn);
-  });
-  const categoryColors: Record<string, string> = {
-    'สารเคมี': '#EF4444',
-    'วัสดุวิทยาศาสตร์': '#3B82F6',
-    'วัสดุสำนักงาน': '#F59E0B',
-    'วัสดุงานบ้าน': '#10B981',
-  };
-  const donutData = Array.from(categoryMap.entries()).map(([label, value]) => ({
-    label,
-    value,
-    color: categoryColors[label] || '#94a3b8',
-  }));
-
   // Yearly chart data
   const yearlyChartData = yearlyData.map(d => ({
     label: thaiMonthsShort[d.month - 1],
+    fullLabel: thaiMonths[d.month - 1],
     withdrawn: d.withdrawn,
     added: d.added,
   }));
@@ -323,9 +247,10 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
   // Monthly top items chart
   const monthlyChartData = monthlySummary
     .sort((a, b) => b.total_withdrawn - a.total_withdrawn)
-    .slice(0, 10)
-    .map(r => ({
-      label: r.item_name.length > 20 ? r.item_name.slice(0, 18) + '...' : r.item_name,
+    .slice(0, 20)
+    .map((r, i) => ({
+      label: String(i + 1),
+      fullLabel: r.item_name,
       withdrawn: r.total_withdrawn,
       added: r.total_added,
     }));
@@ -337,15 +262,7 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
     <div className="min-h-screen bg-[#f6f7f8]" style={{ fontFamily: "'Space Grotesk', 'Noto Sans Thai', sans-serif" }}>
       <div className="p-8 max-w-7xl mx-auto w-full">
 
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-          <button onClick={onNavigateHome} className="hover:text-[#14b84b] transition-colors flex items-center gap-1">
-            <span className="material-symbols-outlined text-base">home</span>
-            <span>หน้าหลัก</span>
-          </button>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-[#14b84b] font-medium">สรุปรายงาน</span>
-        </div>
+
 
         {/* Title + Controls */}
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
@@ -453,10 +370,9 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
           )}
         </div>
 
-        {/* Charts Row */}
-        <div className={`grid ${viewMode === 'monthly' ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1'} gap-6 mb-6`}>
-          {/* Bar Chart */}
-          <div className={`bg-white rounded-xl border border-slate-200 p-6 ${viewMode === 'monthly' ? 'lg:col-span-2' : ''}`}>
+        {/* Chart */}
+        <div className="mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-slate-900 flex items-center gap-2">
                 <span className="material-symbols-outlined text-[#14b84b]">bar_chart</span>
@@ -489,23 +405,6 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
               <BarChart data={viewMode === 'yearly' ? yearlyChartData : monthlyChartData} />
             )}
           </div>
-
-          {/* Donut Chart (monthly only) */}
-          {viewMode === 'monthly' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-6">
-                <span className="material-symbols-outlined text-[#14b84b]">donut_small</span>
-                สัดส่วนตามหมวดหมู่
-              </h3>
-              {donutData.length === 0 ? (
-                <div className="h-[180px] flex items-center justify-center">
-                  <p className="text-sm text-slate-400">ไม่มีข้อมูล</p>
-                </div>
-              ) : (
-                <DonutChart data={donutData} />
-              )}
-            </div>
-          )}
         </div>
 
         {/* Detail Table (monthly view) */}
@@ -556,15 +455,7 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ onNavigateHome }) => {
                           <span className="text-xs text-slate-400 ml-2">({row.unit})</span>
                         </td>
                         <td className="px-6 py-3.5">
-                          <span
-                            className="text-xs font-medium px-2 py-1 rounded"
-                            style={{
-                              backgroundColor: (categoryColors[row.category_name] || '#94a3b8') + '18',
-                              color: categoryColors[row.category_name] || '#94a3b8',
-                            }}
-                          >
-                            {row.category_name}
-                          </span>
+                          <span className="text-sm text-slate-600">{row.category_name}</span>
                         </td>
                         <td className="px-6 py-3.5 text-center">
                           <span className="font-bold text-green-600">{row.total_withdrawn}</span>

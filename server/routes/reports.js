@@ -4,7 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 // ทุก report ต้อง login (ทั้ง admin + user ดูได้)
 router.use(authenticateToken);
@@ -53,6 +53,25 @@ router.get('/dashboard', (req, res, next) => {
   try {
     const stats = db.getDashboardStats();
     res.json({ success: true, data: stats });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/reports/monthly-transactions
+router.delete('/monthly-transactions', requireAdmin, (req, res, next) => {
+  try {
+    const { item_id, year, month } = req.body;
+
+    if (!item_id || !year || !month) {
+      return res.status(400).json({
+        success: false,
+        error: 'กรุณาระบุ item_id, year และ month',
+      });
+    }
+
+    const deleted = db.deleteMonthlyTransactions(Number(item_id), Number(year), Number(month));
+    res.json({ success: true, deleted });
   } catch (err) {
     next(err);
   }

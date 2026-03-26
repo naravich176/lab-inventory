@@ -23,7 +23,7 @@ const roleLabels: Record<string, string> = {
 
 const App: React.FC = () => {
   const { user, isLoggedIn, isLoading, isAdmin, isStaff, isProcurement, logout } = useAuth();
-  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [currentPage, setCurrentPage] = useState<Page>(isProcurement ? 'procurement' : 'home');
   const [showSettings, setShowSettings] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -94,12 +94,12 @@ const App: React.FC = () => {
             {navButton('home', 'หน้าหลัก')}
             {canManageItems && navButton('items', 'จัดการวัสดุอุปกรณ์')}
             {navButton('procurement', 'จัดซื้อ')}
-            {navButton('report', 'สรุปรายงาน')}
-            {navButton('print', 'ปริ้นรายการ')}
+            {!isProcurement && navButton('report', 'สรุปรายงาน')}
+            {!isProcurement && navButton('print', 'ปริ้นรายการ')}
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <NotificationPanel onNavigateItems={() => setCurrentPage('items')} />
+          {!isProcurement && <NotificationPanel onNavigateItems={() => setCurrentPage('items')} onNavigateProcurement={() => setCurrentPage('procurement')} />}
 
           {/* Settings */}
           <div className="relative" ref={settingsRef}>

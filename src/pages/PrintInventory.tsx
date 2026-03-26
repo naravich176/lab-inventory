@@ -33,6 +33,8 @@ const allColumns: ColumnConfig[] = [
   { key: 'current_stock', label: 'คงเหลือ', default: true },
   { key: 'min_stock', label: 'ขั้นต่ำ', default: false },
   { key: 'unit', label: 'หน่วย', default: true },
+  { key: 'grade', label: 'เกรด', default: false },
+  { key: 'brand', label: 'ยี่ห้อ', default: false },
   { key: 'updated_at', label: 'วันที่อัปเดต', default: true },
   { key: 'description', label: 'คำอธิบาย', default: false },
 ];
@@ -157,6 +159,10 @@ const PrintInventory: React.FC<PrintInventoryProps> = ({ onNavigateHome }) => {
         return item.min_stock;
       case 'unit':
         return item.unit;
+      case 'grade':
+        return (item.description || '').split('|')[1] || '-';
+      case 'brand':
+        return (item.description || '').split('|')[2] || '-';
       case 'updated_at':
         return formatDate(item.updated_at);
       case 'description':
@@ -204,15 +210,7 @@ const PrintInventory: React.FC<PrintInventoryProps> = ({ onNavigateHome }) => {
       <div className="no-print min-h-screen bg-[#f6f7f8]" style={{ fontFamily: "'Space Grotesk', 'Noto Sans Thai', sans-serif" }}>
         <div className="p-8 max-w-7xl mx-auto w-full">
 
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-            <button onClick={onNavigateHome} className="hover:text-[#14b84b] transition-colors flex items-center gap-1">
-              <span className="material-symbols-outlined text-base">home</span>
-              <span>หน้าหลัก</span>
-            </button>
-            <span className="material-symbols-outlined text-sm">chevron_right</span>
-            <span className="text-[#14b84b] font-medium">ปริ้นรายการวัสดุ</span>
-          </div>
+
 
           {/* Title */}
           <div className="flex items-start justify-between mb-6">
@@ -314,7 +312,7 @@ const PrintInventory: React.FC<PrintInventoryProps> = ({ onNavigateHome }) => {
                         type="checkbox"
                         checked={selectedColumns.includes(col.key)}
                         onChange={() => toggleColumn(col.key)}
-                        className="w-4 h-4 rounded border-slate-300 text-[#14b84b] focus:ring-[#14b84b]"
+                        className="w-4 h-4 rounded border-slate-300 accent-[#14b84b] focus:ring-[#14b84b]"
                       />
                       <span className="text-sm text-slate-600 group-hover:text-slate-900">{col.label}</span>
                     </label>
